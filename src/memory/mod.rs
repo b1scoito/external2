@@ -26,11 +26,11 @@ impl LinuxMemory {
             )
         };
 
-        if bytes_read == -1 {
-            return Err(color_eyre::eyre::eyre!(
-                "Failed to read memory from process!"
-            ));
-        }
+        // if bytes_read == -1 {
+        //     return Err(color_eyre::eyre::eyre!(
+        //         "Failed to read memory from process!"
+        //     ));
+        // }
 
         Ok(unsafe { buffer.assume_init() })
     }
@@ -47,9 +47,9 @@ impl LinuxMemory {
             )
         };
 
-        if bytes_written == -1 {
-            return Err(color_eyre::eyre::eyre!("Failed to write memory to process"));
-        }
+        // if bytes_written == -1 {
+        //     return Err(color_eyre::eyre::eyre!("Failed to write memory to process"));
+        // }
 
         Ok(())
     }

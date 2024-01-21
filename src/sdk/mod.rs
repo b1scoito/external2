@@ -2,6 +2,8 @@ use color_eyre::eyre::Result;
 use log::{debug, info};
 use sysinfo::System;
 
+use crate::memory::{self, LinuxMemory};
+
 pub fn init() -> Result<()> {
     info!("Initializing SDK!");
 
@@ -18,11 +20,28 @@ pub fn init() -> Result<()> {
     }
 
     info!("Found cs2 process with PID: {}", cs2_pid);
+    let memory = LinuxMemory::new(cs2_pid as i32);
 
     // Get client.so
+    let mut client_base: usize = 0;
     let process_maps = proc_maps::get_process_maps(cs2_pid as i32)?;
-    for process_map in process_maps {
-        if process_map.
+    for map in process_maps {
+        if map.filename().is_none() {
+            continue;
+        }
+
+        if map
+            .filename()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("libclient.so")
+        {
+            debug!("Found client.so at: {:?}", map);
+            client_base = map.start();
+            let buffer = memory.read(client_base)?;
+            debug!("Read memory: {:?}", buffer);
+        }
     }
 
     Ok(())
