@@ -1,35 +1,56 @@
-// MIT License
-//
-// Copyright (c) 2018 frk <hazefrk+dev@gmail.com>
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
+use std::{ffi::c_void, mem::MaybeUninit};
 
-mod findpattern;
-mod module;
-mod process;
-mod snapshot;
+use color_eyre::eyre::Error;
 
-pub use self::findpattern::*;
-pub use self::module::*;
-pub use self::process::*;
-pub use self::snapshot::*;
+/// Memory module
+///
+pub struct LinuxMemory {
+    pub process_pid: libc::pid_t,
+}
 
-pub trait Constructor {
-    fn new() -> Self;
+impl LinuxMemory {
+    pub fn new(process_pid: libc::pid_t) -> Self {
+        Self { process_pid }
+    }
+
+    /// Read memory from a process
+    pub fn read<T>(&self, address: usize) -> Result<T, Error> {
+        let mut buffer = MaybeUninit::<T>::uninit();
+        let buffer_ptr = buffer.as_mut_ptr() as *mut c_void;
+        let bytes_read = unsafe {
+            libc::ptrace(
+                libc::PTRACE_PEEKDATA,
+                self.process_pid,
+                address as *mut c_void,
+                buffer_ptr,
+            )
+        };
+
+        if bytes_read == -1 {
+            return Err(color_eyre::eyre::eyre!(
+                "Failed to read memory from process!"
+            ));
+        }
+
+        Ok(unsafe { buffer.assume_init() })
+    }
+
+    /// Write memory to a process
+    pub fn write<T>(&self, address: usize, value: T) -> Result<(), Error> {
+        let buffer_ptr = &value as *const T as *const c_void;
+        let bytes_written = unsafe {
+            libc::ptrace(
+                libc::PTRACE_POKEDATA,
+                self.process_pid,
+                address as *mut c_void,
+                buffer_ptr,
+            )
+        };
+
+        if bytes_written == -1 {
+            return Err(color_eyre::eyre::eyre!("Failed to write memory to process"));
+        }
+
+        Ok(())
+    }
 }
