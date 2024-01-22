@@ -12,14 +12,23 @@ pub struct LinuxMemory {
     pub process_pid: Pid,
 }
 
-impl LinuxMemory {
+mod pattern;
+
+pub trait Memory {
+    fn new(process_pid: Pid) -> Self;
+    fn read<T>(&self, address: usize) -> Result<T, Error>;
+    fn read_into(&self, address: usize, buffer: &mut [u8]) -> Result<usize, Error>;
+    fn write<T>(&self, address: usize, value: T) -> Result<(), Error>;
+}
+
+impl Memory for LinuxMemory {
     /// Creates a new [`LinuxMemory`].
-    pub fn new(process_pid: Pid) -> Self {
+    fn new(process_pid: Pid) -> Self {
         Self { process_pid }
     }
 
     /// Read memory from a process
-    pub fn read<T>(&self, address: usize) -> Result<T, Error> {
+    fn read<T>(&self, address: usize) -> Result<T, Error> {
         let mut buffer = vec![0; std::mem::size_of::<T>()];
         let bytes_read = process_vm_readv(
             self.process_pid,
@@ -40,8 +49,30 @@ impl LinuxMemory {
         Ok(unsafe { std::ptr::read(buffer.as_ptr() as *const T) })
     }
 
+    /// Read memory from a process into a buffer
+    fn read_into(&self, address: usize, buffer: &mut [u8]) -> Result<usize, Error> {
+        let buffer_len = buffer.len();
+        let bytes_read = process_vm_readv(
+            self.process_pid,
+            &mut [IoSliceMut::new(buffer)],
+            &[uio::RemoteIoVec {
+                base: address,
+                len: buffer_len,
+            }],
+        )?;
+
+        if bytes_read != buffer_len {
+            return Err(eyre::eyre!(
+                "Failed to read memory from process: {}",
+                self.process_pid
+            ));
+        }
+
+        Ok(bytes_read)
+    }
+
     /// Write memory to a process
-    pub fn write<T>(&self, address: usize, value: T) -> Result<(), Error> {
+    fn write<T>(&self, address: usize, value: T) -> Result<(), Error> {
         let mut buffer = vec![0u8; std::mem::size_of::<T>()];
         let value_ptr = &value as *const T as *const u8;
         unsafe {

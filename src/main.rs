@@ -1,4 +1,5 @@
 use color_eyre::Result;
+use sdk::{LinuxSdk, Sdk};
 
 mod memory;
 mod sdk;
@@ -13,7 +14,7 @@ fn main() -> Result<()> {
         .init();
 
     // Initialize the SDK
-    sdk::init()?;
+    LinuxSdk::new().init()?;
 
     Ok(())
 }

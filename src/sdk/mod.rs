@@ -1,50 +1,84 @@
+use std::collections::HashMap;
+
 use color_eyre::eyre::Result;
 use log::{debug, info};
-use nix::unistd::Pid;
 use sysinfo::System;
 
-use crate::memory::{self, LinuxMemory};
+use crate::memory::{LinuxMemory, Memory};
 
-pub fn init() -> Result<()> {
-    info!("Initializing SDK!");
+pub struct LinuxSdk {}
+pub struct WindowsSdk {}
 
-    // System
-    let mut system = System::new();
-    system.refresh_all();
+pub trait Sdk {
+    fn new() -> Self;
+    fn init(&self) -> Result<()>;
+}
 
-    let mut cs2_pid: usize = 0;
-
-    // Get cs2 process ID
-    let cs2_pids = system.processes_by_exact_name("cs2");
-    for cs2 in cs2_pids {
-        cs2_pid = cs2.parent().unwrap().into();
+impl Sdk for LinuxSdk {
+    fn new() -> Self {
+        Self {}
     }
 
-    info!("Found cs2 process with PID: {}", cs2_pid);
+    fn init(&self) -> Result<()> {
+        info!("initializing linux sdk");
 
-    let memory = LinuxMemory::new(Pid::from_raw(cs2_pid as i32));
+        // System
+        let mut system = System::new();
+        system.refresh_all();
 
-    // Get client.so
-    let mut client_base: usize = 0;
-    let process_maps = proc_maps::get_process_maps(cs2_pid as i32)?;
-    for map in process_maps {
-        if map.filename().is_none() {
-            continue;
+        let mut cs2_pid: usize = 0;
+
+        // Get cs2 process ID
+        let cs2_pids = system.processes_by_exact_name("cs2");
+        for cs2 in cs2_pids {
+            cs2_pid = cs2.parent().unwrap().into();
         }
 
-        if map
-            .filename()
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .contains("libclient.so")
-        {
-            debug!("Found client.so at: {:?}", map);
-            client_base = map.start();
-            let buffer = memory.read::<usize>(client_base)?;
-            debug!("Read memory: {:#?}", buffer);
+        debug!("found game process with pid: {}", cs2_pid);
+
+        let mut libclient_base_address: usize = 0;
+
+        // Populate base addresses
+        let process_maps = proc_maps::get_process_maps(cs2_pid as i32)?;
+        for map in process_maps {
+            if map.filename().is_none() {
+                continue;
+            }
+
+            match map.filename() {
+                Some(filename) => {
+                    if filename.to_string_lossy().contains("libclient.so") && map.is_exec() {
+                        debug!(
+                            "found libclient.so at: {:?} address: 0x{:x}",
+                            filename,
+                            map.start()
+                        );
+
+                        libclient_base_address = map.start();
+                    }
+                }
+                None => continue,
+            }
         }
+
+        // TODO: Find dwLocalPlayerPawn pattern AND offset, then add them together to get the final player address,
+        // with that, copy the player struct into a local struct and return the flags so we can check if the player
+        // is onground, with that, we get the dwForceJump pattern and respective address.
+
+        debug!("client base address: 0x{:x}", libclient_base_address);
+
+        Ok(())
+    }
+}
+
+impl Sdk for WindowsSdk {
+    fn new() -> Self {
+        Self {}
     }
 
-    Ok(())
+    fn init(&self) -> Result<()> {
+        info!("initializing windows sdk");
+
+        Ok(())
+    }
 }
