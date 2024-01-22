@@ -8,8 +8,8 @@ edition = "2021"
 [dependencies]
 color-eyre = "0.6.2"
 lazy_static = "1.4.0"
-libc = "0.2.152"
 log = "0.4.20"
+nix = { version = "0.27.1", features = ["uio", "process"] }
 proc-maps = "0.3.2"
 regex = "1.10.2"
 sysinfo = "0.30.5"

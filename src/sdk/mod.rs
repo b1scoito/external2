@@ -1,5 +1,6 @@
 use color_eyre::eyre::Result;
 use log::{debug, info};
+use nix::unistd::Pid;
 use sysinfo::System;
 
 use crate::memory::{self, LinuxMemory};
@@ -20,7 +21,8 @@ pub fn init() -> Result<()> {
     }
 
     info!("Found cs2 process with PID: {}", cs2_pid);
-    let memory = LinuxMemory::new(cs2_pid as i32);
+
+    let memory = LinuxMemory::new(Pid::from_raw(cs2_pid as i32));
 
     // Get client.so
     let mut client_base: usize = 0;
@@ -39,8 +41,8 @@ pub fn init() -> Result<()> {
         {
             debug!("Found client.so at: {:?}", map);
             client_base = map.start();
-            let buffer = memory.read(client_base)?;
-            debug!("Read memory: {:?}", buffer);
+            let buffer = memory.read::<usize>(client_base)?;
+            debug!("Read memory: {:#?}", buffer);
         }
     }
 
