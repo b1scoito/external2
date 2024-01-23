@@ -4,10 +4,10 @@
 /// The [`Memory`] trait is used to read and write memory from a process.
 use color_eyre::eyre::{self, Error};
 use nix::{
-    sys::uio::{self, process_vm_readv},
+    sys::uio::{self, process_vm_readv, process_vm_writev},
     unistd::Pid,
 };
-use std::io::IoSliceMut;
+use std::io::{IoSlice, IoSliceMut};
 pub struct LinuxMemory {
     pub process_pid: Pid,
 }
@@ -71,16 +71,14 @@ impl Memory for LinuxMemory {
         Ok(bytes_read)
     }
 
-    /// Write memory to a process
+    /// Write memory to a process using process_writev
     fn write<T>(&self, address: usize, value: T) -> Result<(), Error> {
-        let mut buffer = vec![0u8; std::mem::size_of::<T>()];
-        let value_ptr = &value as *const T as *const u8;
-        unsafe {
-            std::ptr::copy_nonoverlapping(value_ptr, buffer.as_mut_ptr(), std::mem::size_of::<T>());
-        }
-        let bytes_written = process_vm_readv(
+        let buffer = unsafe {
+            std::slice::from_raw_parts(&value as *const T as *const u8, std::mem::size_of::<T>())
+        };
+        let bytes_written = process_vm_writev(
             self.process_pid,
-            &mut [IoSliceMut::new(&mut buffer)],
+            &[IoSlice::new(buffer)],
             &[uio::RemoteIoVec {
                 base: address,
                 len: std::mem::size_of::<T>(),

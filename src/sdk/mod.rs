@@ -1,11 +1,11 @@
-use std::collections::HashMap;
-
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{self, Result};
 use log::{debug, info};
+use nix::unistd::Pid;
 use sysinfo::System;
 
 use crate::memory::{LinuxMemory, Memory};
 
+// TODO: Is this the best way to make this cross-platform?
 pub struct LinuxSdk {}
 pub struct WindowsSdk {}
 
@@ -34,11 +34,16 @@ impl Sdk for LinuxSdk {
             cs2_pid = cs2.parent().unwrap().into();
         }
 
+        if cs2_pid == 0 {
+            return Err(eyre::eyre!("failed to find cs2 process"));
+        }
+
         debug!("found game process with pid: {}", cs2_pid);
 
         let mut libclient_base_address: usize = 0;
 
         // Populate base addresses
+        // TODO: make a hashmap for each module
         let process_maps = proc_maps::get_process_maps(cs2_pid as i32)?;
         for map in process_maps {
             if map.filename().is_none() {
@@ -66,6 +71,9 @@ impl Sdk for LinuxSdk {
         // is onground, with that, we get the dwForceJump pattern and respective address.
 
         debug!("client base address: 0x{:x}", libclient_base_address);
+
+        let memory: LinuxMemory = Memory::new(Pid::from_raw(cs2_pid as i32));
+        memory.write::<u32>(libclient_base_address, 0x90909090)?;
 
         Ok(())
     }
