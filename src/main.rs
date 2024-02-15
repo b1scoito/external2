@@ -1,5 +1,10 @@
 use color_eyre::Result;
-use sdk::{LinuxSdk, Sdk};
+
+#[cfg(target_os = "linux")]
+use sdk::{Sdk, LinuxSdk};
+
+#[cfg(target_os = "windows")]
+use sdk::{Sdk, WindowsSdk};
 
 mod memory;
 mod sdk;
@@ -14,7 +19,11 @@ fn main() -> Result<()> {
         .init();
 
     // Initialize the SDK
+    #[cfg(target_os = "unix")]
     LinuxSdk::new().init()?;
+
+    #[cfg(target_os = "windows")]
+    WindowsSdk::new().init()?;
 
     Ok(())
 }

@@ -1,9 +1,16 @@
 use color_eyre::eyre::{self, Result};
 use log::{debug, info};
-use nix::unistd::Pid;
 use sysinfo::System;
 
+#[cfg(target_os = "linux")]
+use nix::unistd::Pid;
+use winapi::um::winuser::{GetAsyncKeyState, VK_SPACE};
+
+use crate::memory::{Memory, WindowsMemory};
+#[cfg(target_os = "linux")]
 use crate::memory::{LinuxMemory, Memory};
+
+mod cs2;
 
 // TODO: Is this the best way to make this cross-platform?
 pub struct LinuxSdk {}
@@ -14,6 +21,7 @@ pub trait Sdk {
     fn init(&self) -> Result<()>;
 }
 
+#[cfg(target_os = "linux")]
 impl Sdk for LinuxSdk {
     fn new() -> Self {
         Self {}
@@ -79,6 +87,41 @@ impl Sdk for LinuxSdk {
     }
 }
 
+struct EntityFlag;
+
+impl EntityFlag {
+    const FL_ONGROUND: u32 = 1 << 0;
+    const FL_DUCKING: u32 = 1 << 1;
+    const FL_WATERJUMP: u32 = 1 << 2;
+    // Unused 1 << 3
+    const FL_UNKNOWN0: u32 = 1 << 4;
+    const FL_FROZEN: u32 = 1 << 5;
+    const FL_ATCONTROLS: u32 = 1 << 6;
+    const FL_CLIENT: u32 = 1 << 7;
+    const FL_FAKECLIENT: u32 = 1 << 8;
+    // Unused 1 << 9
+    const FL_FLY: u32 = 1 << 10;
+    const FL_UNKNOWN1: u32 = 1 << 11;
+    // Unused 1 << 12
+    // Unused 1 << 13
+    const FL_GODMODE: u32 = 1 << 14;
+    const FL_NOTARGET: u32 = 1 << 15;
+    const FL_AIMTARGET: u32 = 1 << 16;
+    // Unused 1 << 17
+    const FL_STATICPROP: u32 = 1 << 18;
+    // Unused 1 << 19
+    const FL_GRENADE: u32 = 1 << 20;
+    const FL_DONTTOUCH: u32 = 1 << 22;
+    const FL_BASEVELOCITY: u32 = 1 << 23;
+    const FL_WORLDBRUSH: u32 = 1 << 24;
+    const FL_OBJECT: u32 = 1 << 25;
+    const FL_ONFIRE: u32 = 1 << 27;
+    const FL_DISSOLVING: u32 = 1 << 28;
+    const FL_TRANSRAGDOLL: u32 = 1 << 29;
+    const FL_UNBLOCKABLE_BY_PLAYER: u32 = 1 << 30;
+}
+
+#[cfg(target_os = "windows")]
 impl Sdk for WindowsSdk {
     fn new() -> Self {
         Self {}
@@ -86,6 +129,51 @@ impl Sdk for WindowsSdk {
 
     fn init(&self) -> Result<()> {
         info!("initializing windows sdk");
+
+        // System
+        let mut system = System::new();
+        system.refresh_all();
+
+        let mut cs2_pid: usize = 0;
+
+        // Get cs2 process ID
+        let cs2_pids = system.processes_by_exact_name("cs2.exe");
+        for cs2 in cs2_pids {
+            cs2_pid = cs2.pid().into();
+        }
+
+        if cs2_pid == 0 {
+            return Err(eyre::eyre!("failed to find cs2 process"));
+        }
+
+        debug!("found game process with pid: {}", cs2_pid);
+
+        let memory: WindowsMemory = Memory::new(cs2_pid.into())?;
+        let (base_address, size) = memory.get_module("client.dll")?;
+
+        debug!("client base address: 0x{:x} size: {}", base_address, size);
+
+        let local_player_pawn_address: usize = memory.read::<usize>(base_address + cs2::windows::offsets::client_dll::dwLocalPlayerPawn)?;
+        debug!("local player pawn address: 0x{:x}", local_player_pawn_address);
+
+        
+        loop {
+            if unsafe { GetAsyncKeyState(VK_SPACE) } == 0 {
+                continue;
+            }
+            
+            let player_flags = memory.read::<u32>(local_player_pawn_address + 0x3D4)?;
+
+            if player_flags & EntityFlag::FL_ONGROUND != 0 {
+                debug!("player is on ground");
+                memory.write::<u32>(base_address + cs2::windows::offsets::client_dll::dwForceJump, 65537)?;
+            } else {
+                debug!("player is not on ground");
+                if memory.read::<u32>(base_address + cs2::windows::offsets::client_dll::dwForceJump)? == 65537 {
+                    memory.write::<u32>(base_address + cs2::windows::offsets::client_dll::dwForceJump, 256)?;
+                }
+            }
+        }
 
         Ok(())
     }
