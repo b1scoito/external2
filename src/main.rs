@@ -2,7 +2,7 @@ use cheats::bhop;
 use color_eyre::Result;
 
 #[cfg(target_os = "linux")]
-use sdk::{Sdk, LinuxSdk};
+use sdk::{LinuxSdk, Sdk};
 
 #[cfg(target_os = "windows")]
 use sdk::{Sdk, WindowsSdk};
@@ -21,8 +21,8 @@ fn main() -> Result<()> {
         .init();
 
     // Initialize the SDK
-    #[cfg(target_os = "unix")]
-    LinuxSdk::new().init()?;
+    #[cfg(target_os = "linux")]
+    let sdk = LinuxSdk::new()?;
 
     #[cfg(target_os = "windows")]
     let sdk = WindowsSdk::new()?;

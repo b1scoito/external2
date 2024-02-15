@@ -1,19 +1,26 @@
 use std::ffi::{c_char, c_void};
 
-use color_eyre::eyre::{self, Result};
-use log::{debug, info};
-use sysinfo::System;
+use color_eyre::eyre::Result;
+use log::info;
+use sysinfo::{Pid, System};
+
+#[cfg(target_os = "linux")]
+use crate::memory::{LinuxMemory, Memory};
 
 #[cfg(target_os = "windows")]
 use crate::memory::{Memory, WindowsMemory};
-#[cfg(target_os = "linux")]
-use crate::memory::{LinuxMemory, Memory};
 
 pub(crate) mod cs2;
 
 // TODO: Is this the best way to make this cross-platform?
 #[cfg(target_os = "linux")]
-pub struct LinuxSdk {}
+pub struct LinuxSdk {
+    local_player_pawn_address: usize,
+    client_base_address: usize,
+    client_size: usize,
+    memory: LinuxMemory,
+    global_vars: GlobalVarsBase,
+}
 
 #[cfg(target_os = "windows")]
 pub struct WindowsSdk {
@@ -26,6 +33,9 @@ pub struct WindowsSdk {
 
 pub trait Sdk {
     fn get_global_vars(&self) -> &GlobalVarsBase;
+    #[cfg(target_os = "linux")]
+    fn get_memory(&self) -> &LinuxMemory;
+    #[cfg(target_os = "windows")]
     fn get_memory(&self) -> &WindowsMemory;
     fn get_client_size(&self) -> usize;
     fn get_client_base_address(&self) -> usize;
@@ -37,67 +47,73 @@ pub trait Sdk {
 
 #[cfg(target_os = "linux")]
 impl Sdk for LinuxSdk {
-    fn new() -> Self {
-        Self {}
-    }
-
-    fn init(&self) -> Result<()> {
+    fn new() -> Result<Self> {
         info!("initializing linux sdk");
 
         // System
         let mut system = System::new();
         system.refresh_all();
 
-        let mut cs2_pid: usize = 0;
+        let mut cs2_pid: Pid = Pid::from(0);
+
+        // system.processes_by_name("cs2").iter().for_each(|cs2| {
+        //     cs2_pid = cs2.pid();
+        // });
 
         // Get cs2 process ID
-        let cs2_pids = system.processes_by_exact_name("cs2");
-        for cs2 in cs2_pids {
-            cs2_pid = cs2.parent().unwrap().into();
-        }
+        let memory: LinuxMemory = Memory::new(nix::unistd::Pid::from_raw(cs2_pid.as_u32() as i32))?;
+        let (client_base_address, client_size) = memory.get_module("libclient.so")?;
+        let (engine2_base_address, engine2_size) = memory.get_module("libengine2.so")?;
 
-        if cs2_pid == 0 {
-            return Err(eyre::eyre!("failed to find cs2 process"));
-        }
+        // let local_player_pawn_address: usize = memory.read::<usize>(
+        //     client_base_address + cs2::linux::offsets::client_dll::dwLocalPlayerPawn,
+        // )?;
+        let local_player_pawn_address: usize = 0;
 
-        debug!("found game process with pid: {}", cs2_pid);
+        Ok(Self {
+            local_player_pawn_address,
+            client_base_address,
+            client_size,
+            memory,
+            global_vars: GlobalVarsBase {
+                real_time: todo!(),
+                frame_count: todo!(),
+                frame_time: todo!(),
+                absolute_frame_time: todo!(),
+                max_clients: todo!(),
+                pad_0: todo!(),
+                frame_time_2: todo!(),
+                current_time: todo!(),
+                current_time_2: todo!(),
+                pad_1: todo!(),
+                tick_count: todo!(),
+                pad_2: todo!(),
+                network_channel: todo!(),
+                pad_3: todo!(),
+                current_map: todo!(),
+                current_map_name: todo!(),
+            },
+        })
+    }
 
-        let mut libclient_base_address: usize = 0;
+    fn get_memory(&self) -> &LinuxMemory {
+        todo!()
+    }
 
-        // Populate base addresses
-        // TODO: make a hashmap for each module
-        let process_maps = proc_maps::get_process_maps(cs2_pid as i32)?;
-        for map in process_maps {
-            if map.filename().is_none() {
-                continue;
-            }
+    fn get_client_size(&self) -> usize {
+        todo!()
+    }
 
-            match map.filename() {
-                Some(filename) => {
-                    if filename.to_string_lossy().contains("libclient.so") && map.is_exec() {
-                        debug!(
-                            "found libclient.so at: {:?} address: 0x{:x}",
-                            filename,
-                            map.start()
-                        );
+    fn get_client_base_address(&self) -> usize {
+        todo!()
+    }
 
-                        libclient_base_address = map.start();
-                    }
-                }
-                None => continue,
-            }
-        }
+    fn get_local_player_pawn_address(&self) -> usize {
+        todo!()
+    }
 
-        // TODO: Find dwLocalPlayerPawn pattern AND offset, then add them together to get the final player address,
-        // with that, copy the player struct into a local struct and return the flags so we can check if the player
-        // is onground, with that, we get the dwForceJump pattern and respective address.
-
-        debug!("client base address: 0x{:x}", libclient_base_address);
-
-        let memory: LinuxMemory = Memory::new(Pid::from_raw(cs2_pid as i32));
-        memory.write::<u32>(libclient_base_address, 0x90909090)?;
-
-        Ok(())
+    fn get_global_vars(&self) -> &GlobalVarsBase {
+        todo!()
     }
 }
 
@@ -147,17 +163,33 @@ impl Sdk for WindowsSdk {
 
         let memory: WindowsMemory = Memory::new(cs2_pid.into())?;
         let (client_base_address, client_size) = memory.get_module("client.dll")?;
-        debug!("client base address: 0x{:x} size: {}", client_base_address, client_size);
+        debug!(
+            "client base address: 0x{:x} size: {}",
+            client_base_address, client_size
+        );
 
         let (engine_base_address, engine_size) = memory.get_module("engine2.dll")?;
-        debug!("engine base address: 0x{:x} size: {}", engine_base_address, engine_size);
+        debug!(
+            "engine base address: 0x{:x} size: {}",
+            engine_base_address, engine_size
+        );
 
-        let local_player_pawn_address: usize = memory.read::<usize>(client_base_address + cs2::windows::offsets::client_dll::dwLocalPlayerPawn)?;
-        debug!("local player pawn address: 0x{:x}", local_player_pawn_address);
+        let local_player_pawn_address: usize = memory.read::<usize>(
+            client_base_address + cs2::windows::offsets::client_dll::dwLocalPlayerPawn,
+        )?;
+        debug!(
+            "local player pawn address: 0x{:x}",
+            local_player_pawn_address
+        );
 
-        debug!("global vars addres: {}", client_base_address + cs2::windows::offsets::client_dll::dwGlobalVars);
+        debug!(
+            "global vars addres: {}",
+            client_base_address + cs2::windows::offsets::client_dll::dwGlobalVars
+        );
 
-        let global_vars = memory.read::<GlobalVarsBase>(client_base_address + cs2::windows::offsets::client_dll::dwGlobalVars)?;
+        let global_vars = memory.read::<GlobalVarsBase>(
+            client_base_address + cs2::windows::offsets::client_dll::dwGlobalVars,
+        )?;
 
         Ok(Self {
             local_player_pawn_address,
