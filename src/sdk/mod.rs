@@ -1,24 +1,38 @@
+use std::ffi::{c_char, c_void};
+
 use color_eyre::eyre::{self, Result};
 use log::{debug, info};
 use sysinfo::System;
 
-#[cfg(target_os = "linux")]
-use nix::unistd::Pid;
-use winapi::um::winuser::{GetAsyncKeyState, VK_SPACE};
-
+#[cfg(target_os = "windows")]
 use crate::memory::{Memory, WindowsMemory};
 #[cfg(target_os = "linux")]
 use crate::memory::{LinuxMemory, Memory};
 
-mod cs2;
+pub(crate) mod cs2;
 
 // TODO: Is this the best way to make this cross-platform?
+#[cfg(target_os = "linux")]
 pub struct LinuxSdk {}
-pub struct WindowsSdk {}
+
+#[cfg(target_os = "windows")]
+pub struct WindowsSdk {
+    local_player_pawn_address: usize,
+    client_base_address: usize,
+    client_size: usize,
+    memory: WindowsMemory,
+    global_vars: GlobalVarsBase,
+}
 
 pub trait Sdk {
-    fn new() -> Self;
-    fn init(&self) -> Result<()>;
+    fn get_global_vars(&self) -> &GlobalVarsBase;
+    fn get_memory(&self) -> &WindowsMemory;
+    fn get_client_size(&self) -> usize;
+    fn get_client_base_address(&self) -> usize;
+    fn get_local_player_pawn_address(&self) -> usize;
+    fn new() -> Result<Self>
+    where
+        Self: Sized;
 }
 
 #[cfg(target_os = "linux")]
@@ -87,47 +101,30 @@ impl Sdk for LinuxSdk {
     }
 }
 
-struct EntityFlag;
-
-impl EntityFlag {
-    const FL_ONGROUND: u32 = 1 << 0;
-    const FL_DUCKING: u32 = 1 << 1;
-    const FL_WATERJUMP: u32 = 1 << 2;
-    // Unused 1 << 3
-    const FL_UNKNOWN0: u32 = 1 << 4;
-    const FL_FROZEN: u32 = 1 << 5;
-    const FL_ATCONTROLS: u32 = 1 << 6;
-    const FL_CLIENT: u32 = 1 << 7;
-    const FL_FAKECLIENT: u32 = 1 << 8;
-    // Unused 1 << 9
-    const FL_FLY: u32 = 1 << 10;
-    const FL_UNKNOWN1: u32 = 1 << 11;
-    // Unused 1 << 12
-    // Unused 1 << 13
-    const FL_GODMODE: u32 = 1 << 14;
-    const FL_NOTARGET: u32 = 1 << 15;
-    const FL_AIMTARGET: u32 = 1 << 16;
-    // Unused 1 << 17
-    const FL_STATICPROP: u32 = 1 << 18;
-    // Unused 1 << 19
-    const FL_GRENADE: u32 = 1 << 20;
-    const FL_DONTTOUCH: u32 = 1 << 22;
-    const FL_BASEVELOCITY: u32 = 1 << 23;
-    const FL_WORLDBRUSH: u32 = 1 << 24;
-    const FL_OBJECT: u32 = 1 << 25;
-    const FL_ONFIRE: u32 = 1 << 27;
-    const FL_DISSOLVING: u32 = 1 << 28;
-    const FL_TRANSRAGDOLL: u32 = 1 << 29;
-    const FL_UNBLOCKABLE_BY_PLAYER: u32 = 1 << 30;
+#[derive(Debug)]
+#[repr(C)]
+pub struct GlobalVarsBase {
+    real_time: f32,                  // 0x0000
+    frame_count: i32,                // 0x0004
+    frame_time: f32,                 // 0x0008
+    absolute_frame_time: f32,        // 0x000C
+    max_clients: i32,                // 0x0010
+    pad_0: [u8; 0x14],               // 0x0014
+    frame_time_2: f32,               // 0x0028
+    current_time: f32,               // 0x002C
+    current_time_2: f32,             // 0x0030
+    pad_1: [u8; 0xC],                // 0x0034
+    tick_count: f32,                 // 0x0040
+    pad_2: [u8; 0x4],                // 0x0044
+    network_channel: *const c_void,  // 0x0048
+    pad_3: [u8; 0x130],              // 0x0050
+    current_map: *const c_char,      // 0x0180
+    current_map_name: *const c_char, // 0x0188
 }
 
 #[cfg(target_os = "windows")]
 impl Sdk for WindowsSdk {
-    fn new() -> Self {
-        Self {}
-    }
-
-    fn init(&self) -> Result<()> {
+    fn new() -> Result<WindowsSdk> {
         info!("initializing windows sdk");
 
         // System
@@ -149,32 +146,45 @@ impl Sdk for WindowsSdk {
         debug!("found game process with pid: {}", cs2_pid);
 
         let memory: WindowsMemory = Memory::new(cs2_pid.into())?;
-        let (base_address, size) = memory.get_module("client.dll")?;
+        let (client_base_address, client_size) = memory.get_module("client.dll")?;
+        debug!("client base address: 0x{:x} size: {}", client_base_address, client_size);
 
-        debug!("client base address: 0x{:x} size: {}", base_address, size);
+        let (engine_base_address, engine_size) = memory.get_module("engine2.dll")?;
+        debug!("engine base address: 0x{:x} size: {}", engine_base_address, engine_size);
 
-        let local_player_pawn_address: usize = memory.read::<usize>(base_address + cs2::windows::offsets::client_dll::dwLocalPlayerPawn)?;
+        let local_player_pawn_address: usize = memory.read::<usize>(client_base_address + cs2::windows::offsets::client_dll::dwLocalPlayerPawn)?;
         debug!("local player pawn address: 0x{:x}", local_player_pawn_address);
 
-        
-        loop {
-            if unsafe { GetAsyncKeyState(VK_SPACE) } == 0 {
-                continue;
-            }
-            
-            let player_flags = memory.read::<u32>(local_player_pawn_address + 0x3D4)?;
+        debug!("global vars addres: {}", client_base_address + cs2::windows::offsets::client_dll::dwGlobalVars);
 
-            if player_flags & EntityFlag::FL_ONGROUND != 0 {
-                debug!("player is on ground");
-                memory.write::<u32>(base_address + cs2::windows::offsets::client_dll::dwForceJump, 65537)?;
-            } else {
-                debug!("player is not on ground");
-                if memory.read::<u32>(base_address + cs2::windows::offsets::client_dll::dwForceJump)? == 65537 {
-                    memory.write::<u32>(base_address + cs2::windows::offsets::client_dll::dwForceJump, 256)?;
-                }
-            }
-        }
+        let global_vars = memory.read::<GlobalVarsBase>(client_base_address + cs2::windows::offsets::client_dll::dwGlobalVars)?;
 
-        Ok(())
+        Ok(Self {
+            local_player_pawn_address,
+            client_base_address,
+            client_size,
+            memory,
+            global_vars,
+        })
+    }
+
+    fn get_local_player_pawn_address(&self) -> usize {
+        self.local_player_pawn_address
+    }
+
+    fn get_client_base_address(&self) -> usize {
+        self.client_base_address
+    }
+
+    fn get_client_size(&self) -> usize {
+        self.client_size
+    }
+
+    fn get_memory(&self) -> &WindowsMemory {
+        &self.memory
+    }
+
+    fn get_global_vars(&self) -> &GlobalVarsBase {
+        &self.global_vars
     }
 }

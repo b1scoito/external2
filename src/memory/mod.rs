@@ -172,7 +172,6 @@ impl Memory for WindowsMemory {
             if Module32FirstW(snapshot, &mut entry).is_ok() {
                 loop {
                     let module_name = OsString::from_wide(&entry.szModule).into_string().unwrap();
-                    debug!("module name: {} mod name: {}", module_name, mod_name);
                     if module_name.starts_with(mod_name) {
                         CloseHandle(snapshot)?;
                         return Ok((entry.modBaseAddr as usize, entry.modBaseSize as usize));

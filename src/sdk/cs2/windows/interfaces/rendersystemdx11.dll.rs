@@ -3,7 +3,7 @@
  * Thu, 15 Feb 2024 04:24:26 +0000
  */
 
-#![allow(non_snake_case, non_upper_case_globals)]
+ #![allow(non_snake_case, non_upper_case_globals, dead_code)]
 
 pub mod RenderInputLayoutField_t {
     pub const m_pSemanticName: usize = 0x0; // uint8_t[32]

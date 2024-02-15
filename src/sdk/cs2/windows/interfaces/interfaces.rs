@@ -3,7 +3,7 @@
  * Thu, 15 Feb 2024 04:24:28 +0000
  */
 
-#![allow(non_snake_case, non_upper_case_globals)]
+ #![allow(non_snake_case, non_upper_case_globals, dead_code)]
 
 pub mod animationsystem_dll { // animationsystem.dll
     pub const AnimationSystemUtils_001: usize = 0x72E80;

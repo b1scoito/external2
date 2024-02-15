@@ -1,3 +1,4 @@
+use cheats::bhop;
 use color_eyre::Result;
 
 #[cfg(target_os = "linux")]
@@ -6,6 +7,7 @@ use sdk::{Sdk, LinuxSdk};
 #[cfg(target_os = "windows")]
 use sdk::{Sdk, WindowsSdk};
 
+mod cheats;
 mod memory;
 mod sdk;
 
@@ -23,7 +25,10 @@ fn main() -> Result<()> {
     LinuxSdk::new().init()?;
 
     #[cfg(target_os = "windows")]
-    WindowsSdk::new().init()?;
+    let sdk = WindowsSdk::new()?;
+
+    // Start cheats
+    bhop::init(sdk)?;
 
     Ok(())
 }
