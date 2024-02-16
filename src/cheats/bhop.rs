@@ -20,7 +20,6 @@ pub fn init<T: Sdk>(sdk: T) -> Result<()> {
             continue;
         }
 
-        #[cfg(target_os = "linux")]
         thread::sleep(Duration::from_millis(35));
 
         // TODO: sdk.entity.

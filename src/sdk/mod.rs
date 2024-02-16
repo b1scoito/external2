@@ -1,43 +1,35 @@
-use std::ffi::{c_char, c_void};
-
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{self, Result};
 use log::{debug, info};
 use sysinfo::{Pid, System};
-use tracing_subscriber::field::debug;
 
+use crate::memory::Module;
 #[cfg(target_os = "linux")]
-use crate::memory::{LinuxMemory, Memory};
+use crate::memory::{Linux, Memory};
 
 #[cfg(target_os = "windows")]
-use crate::memory::{Memory, WindowsMemory};
+use crate::memory::{Memory, Windows};
 
 pub(crate) mod cs2;
-
-struct Module {
-    name: String,
-    base_address: usize,
-    size: usize,
-}
 
 // TODO: Is this the best way to make this cross-platform?
 #[cfg(target_os = "linux")]
 pub struct LinuxSdk {
     modules: Vec<Module>,
-    memory: LinuxMemory,
+    memory: Linux,
 }
 
 #[cfg(target_os = "windows")]
 pub struct WindowsSdk {
     modules: Vec<Module>,
-    memory: WindowsMemory,
+    memory: Windows,
 }
 
 pub trait Sdk {
     fn get_module(&self, name: &str) -> Option<&Module>;
     #[cfg(target_os = "linux")]
-    fn get_memory(&self) -> &LinuxMemory;
+    fn get_memory(&self) -> &Linux;
     #[cfg(target_os = "windows")]
-    fn get_memory(&self) -> &WindowsMemory;
+    fn get_memory(&self) -> &Windows;
     fn new() -> Result<Self>
     where
         Self: Sized;
@@ -62,38 +54,24 @@ impl Sdk for LinuxSdk {
             }
         }
 
+        if cs2_pid == Pid::from(0) {
+            return Err(eyre::eyre!("failed to find cs2 process"));
+        }
+
         // Get cs2 process ID
-        let memory: LinuxMemory = Memory::new(nix::unistd::Pid::from_raw(cs2_pid.as_u32() as i32))?;
-        let (client_base_address, client_size) = memory.get_module("libclient.so")?;
-        let (engine2_base_address, engine2_size) = memory.get_module("libengine2.so")?;
-
-        debug!(
-            "client base address: 0x{:x} size: {}",
-            client_base_address, client_size
-        );
-
-        debug!(
-            "engine2 base address: 0x{:x} size: {}",
-            engine2_base_address, engine2_size
-        );
+        let memory: Linux = Memory::new(nix::unistd::Pid::from_raw(cs2_pid.as_u32() as i32))?;
 
         let modules = vec![
-            Module {
-                name: "libclient.so".to_string(),
-                base_address: client_base_address,
-                size: client_size,
-            },
-            Module {
-                name: "libengine2.so".to_string(),
-                base_address: engine2_base_address,
-                size: engine2_size,
-            },
+            memory.get_module("libclient.so")?,
+            memory.get_module("libengine2.so")?,
         ];
+
+        debug!("Modules found: {:?}", modules);
 
         Ok(Self { modules, memory })
     }
 
-    fn get_memory(&self) -> &LinuxMemory {
+    fn get_memory(&self) -> &Linux {
         &self.memory
     }
 
@@ -125,7 +103,7 @@ impl Sdk for WindowsSdk {
 
         debug!("found game process with pid: {}", cs2_pid);
 
-        let memory: WindowsMemory = Memory::new(cs2_pid.into())?;
+        let memory: Windows = Memory::new(cs2_pid.into())?;
         let (client_base_address, client_size) = memory.get_module("client.dll")?;
         debug!(
             "client base address: 0x{:x} size: {}",
@@ -176,7 +154,7 @@ impl Sdk for WindowsSdk {
         self.client_size
     }
 
-    fn get_memory(&self) -> &WindowsMemory {
+    fn get_memory(&self) -> &Windows {
         &self.memory
     }
 

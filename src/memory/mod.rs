@@ -3,9 +3,8 @@
 /// This module contains the [`Memory`] trait and its implementations.
 /// The [`Memory`] trait is used to read and write memory from a process.
 // Global imports
-use color_eyre::eyre::{self, Error, Ok, Result};
+use color_eyre::eyre::{self, Ok, Result};
 
-use log::debug;
 // OS-dependent imports
 #[cfg(target_os = "linux")]
 use nix::{
@@ -38,37 +37,44 @@ use sysinfo::Pid;
 use std::os::windows::ffi::OsStringExt;
 
 #[cfg(target_os = "linux")]
-pub struct LinuxMemory {
+pub struct Linux {
     pub process_pid: Pid,
 }
 
 #[cfg(target_os = "windows")]
-pub struct WindowsMemory {
+pub struct Windows {
     pub process_pid: Pid,
     pub process_handle: HANDLE,
+}
+
+#[derive(Debug)]
+pub struct Module {
+    pub name: String,
+    pub base_address: usize,
+    pub size: usize,
 }
 
 mod pattern;
 
 pub trait Memory {
-    fn new(process_pid: Pid) -> Result<Self, Error>
+    fn new(process_pid: Pid) -> Result<Self>
     where
         Self: Sized;
-    fn read<T>(&self, address: usize) -> Result<T, Error>;
-    fn read_into(&self, address: usize, buffer: &mut [u8]) -> Result<usize, Error>;
-    fn write<T>(&self, address: usize, value: T) -> Result<(), Error>;
-    fn get_module(&self, mod_name: &str) -> Result<(usize, usize)>;
+    fn read<T>(&self, address: usize) -> Result<T>;
+    fn read_into(&self, address: usize, buffer: &mut [u8]) -> Result<usize>;
+    fn write<T>(&self, address: usize, value: T) -> Result<()>;
+    fn get_module(&self, mod_name: &str) -> Result<Module>;
 }
 
 #[cfg(target_os = "linux")]
-impl Memory for LinuxMemory {
+impl Memory for Linux {
     /// Creates a new [`LinuxMemory`].
     fn new(process_pid: Pid) -> Result<Self> {
         Ok(Self { process_pid })
     }
 
     /// Read memory from a process
-    fn read<T>(&self, address: usize) -> Result<T, Error> {
+    fn read<T>(&self, address: usize) -> Result<T> {
         let mut buffer = vec![0; std::mem::size_of::<T>()];
         let bytes_read = process_vm_readv(
             self.process_pid,
@@ -90,7 +96,7 @@ impl Memory for LinuxMemory {
     }
 
     /// Read memory from a process into a buffer
-    fn read_into(&self, address: usize, buffer: &mut [u8]) -> Result<usize, Error> {
+    fn read_into(&self, address: usize, buffer: &mut [u8]) -> Result<usize> {
         let buffer_len = buffer.len();
         let bytes_read = process_vm_readv(
             self.process_pid,
@@ -112,7 +118,7 @@ impl Memory for LinuxMemory {
     }
 
     /// Write memory to a process using process_writev
-    fn write<T>(&self, address: usize, value: T) -> Result<(), Error> {
+    fn write<T>(&self, address: usize, value: T) -> Result<()> {
         let buffer = unsafe {
             std::slice::from_raw_parts(&value as *const T as *const u8, std::mem::size_of::<T>())
         };
@@ -135,11 +141,7 @@ impl Memory for LinuxMemory {
         Ok(())
     }
 
-    fn get_module(&self, mod_name: &str) -> Result<(usize, usize)> {
-        let mut libclient_base_address: usize = 0;
-
-        // Populate base addresses
-        // TODO: make a hashmap for each module
+    fn get_module(&self, mod_name: &str) -> Result<Module> {
         let process_maps = proc_maps::get_process_maps(self.process_pid.into())?;
         for map in process_maps {
             if map.filename().is_none() {
@@ -149,7 +151,11 @@ impl Memory for LinuxMemory {
             match map.filename() {
                 Some(filename) => {
                     if filename.to_string_lossy().contains(mod_name) && map.is_exec() {
-                        return Ok((map.start(), map.size()));
+                        return Ok(Module {
+                            name: filename.to_string_lossy().to_string(),
+                            base_address: map.start() as usize,
+                            size: map.start() as usize,
+                        });
                     }
                 }
                 None => continue,
@@ -161,9 +167,9 @@ impl Memory for LinuxMemory {
 }
 
 #[cfg(target_os = "windows")]
-impl Memory for WindowsMemory {
-    /// Creates a new [`WindowsMemory`].
-    fn new(process_pid: Pid) -> Result<WindowsMemory, Error> {
+impl Memory for Windows {
+    /// Creates a new [`Windows`].
+    fn new(process_pid: Pid) -> Result<Windows> {
         let process_handle =
             unsafe { OpenProcess(PROCESS_ALL_ACCESS, false, process_pid.as_u32())? };
         Ok(Self {
@@ -173,7 +179,7 @@ impl Memory for WindowsMemory {
     }
 
     /// Read memory from a process
-    fn read<T>(&self, address: usize) -> Result<T, Error> {
+    fn read<T>(&self, address: usize) -> Result<T> {
         let mut buffer = vec![0; std::mem::size_of::<T>()];
         unsafe {
             ReadProcessMemory(
@@ -189,7 +195,7 @@ impl Memory for WindowsMemory {
     }
 
     /// Read memory from a process into a buffer
-    fn read_into(&self, address: usize, buffer: &mut [u8]) -> Result<usize, Error> {
+    fn read_into(&self, address: usize, buffer: &mut [u8]) -> Result<usize> {
         let buffer_len = buffer.len();
         unsafe {
             ReadProcessMemory(
@@ -205,7 +211,7 @@ impl Memory for WindowsMemory {
     }
 
     /// Write memory to a process
-    fn write<T>(&self, address: usize, value: T) -> Result<(), Error> {
+    fn write<T>(&self, address: usize, value: T) -> Result<()> {
         let buffer = unsafe {
             std::slice::from_raw_parts(&value as *const T as *const u8, std::mem::size_of::<T>())
         };
@@ -223,7 +229,7 @@ impl Memory for WindowsMemory {
         Ok(())
     }
 
-    fn get_module(&self, mod_name: &str) -> Result<(usize, usize)> {
+    fn get_module(&self, mod_name: &str) -> Result<Module> {
         unsafe {
             let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, self.process_pid.as_u32())?;
             if snapshot == INVALID_HANDLE_VALUE {
@@ -240,7 +246,11 @@ impl Memory for WindowsMemory {
                     let module_name = OsString::from_wide(&entry.szModule).into_string().unwrap();
                     if module_name.starts_with(mod_name) {
                         CloseHandle(snapshot)?;
-                        return Ok((entry.modBaseAddr as usize, entry.modBaseSize as usize));
+                        return Ok(Module {
+                            name: module_name,
+                            base_address: entry.modBaseAddr as usize,
+                            size: entry.modBaseSize as usize,
+                        });
                     }
 
                     if !Module32NextW(snapshot, &mut entry).is_ok() {
