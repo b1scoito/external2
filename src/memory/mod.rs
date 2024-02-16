@@ -5,6 +5,7 @@
 // Global imports
 use color_eyre::eyre::{self, Error, Ok, Result};
 
+use log::debug;
 // OS-dependent imports
 #[cfg(target_os = "linux")]
 use nix::{
@@ -147,7 +148,7 @@ impl Memory for LinuxMemory {
 
             match map.filename() {
                 Some(filename) => {
-                    if filename.to_string_lossy().starts_with(mod_name) && map.is_exec() {
+                    if filename.to_string_lossy().contains(mod_name) && map.is_exec() {
                         return Ok((map.start(), map.size()));
                     }
                 }

@@ -1,8 +1,9 @@
 use std::ffi::{c_char, c_void};
 
 use color_eyre::eyre::Result;
-use log::info;
+use log::{debug, info};
 use sysinfo::{Pid, System};
+use tracing_subscriber::field::debug;
 
 #[cfg(target_os = "linux")]
 use crate::memory::{LinuxMemory, Memory};
@@ -12,34 +13,31 @@ use crate::memory::{Memory, WindowsMemory};
 
 pub(crate) mod cs2;
 
+struct Module {
+    name: String,
+    base_address: usize,
+    size: usize,
+}
+
 // TODO: Is this the best way to make this cross-platform?
 #[cfg(target_os = "linux")]
 pub struct LinuxSdk {
-    local_player_pawn_address: usize,
-    client_base_address: usize,
-    client_size: usize,
+    modules: Vec<Module>,
     memory: LinuxMemory,
-    global_vars: GlobalVarsBase,
 }
 
 #[cfg(target_os = "windows")]
 pub struct WindowsSdk {
-    local_player_pawn_address: usize,
-    client_base_address: usize,
-    client_size: usize,
+    modules: Vec<Module>,
     memory: WindowsMemory,
-    global_vars: GlobalVarsBase,
 }
 
 pub trait Sdk {
-    fn get_global_vars(&self) -> &GlobalVarsBase;
+    fn get_module(&self, name: &str) -> Option<&Module>;
     #[cfg(target_os = "linux")]
     fn get_memory(&self) -> &LinuxMemory;
     #[cfg(target_os = "windows")]
     fn get_memory(&self) -> &WindowsMemory;
-    fn get_client_size(&self) -> usize;
-    fn get_client_base_address(&self) -> usize;
-    fn get_local_player_pawn_address(&self) -> usize;
     fn new() -> Result<Self>
     where
         Self: Sized;
@@ -56,86 +54,52 @@ impl Sdk for LinuxSdk {
 
         let mut cs2_pid: Pid = Pid::from(0);
 
-        // system.processes_by_name("cs2").iter().for_each(|cs2| {
-        //     cs2_pid = cs2.pid();
-        // });
+        let cs2_pids = system.processes_by_exact_name("cs2");
+        for cs2 in cs2_pids {
+            cs2_pid = match cs2.parent() {
+                Some(pid) => pid,
+                None => Pid::from(0),
+            }
+        }
 
         // Get cs2 process ID
         let memory: LinuxMemory = Memory::new(nix::unistd::Pid::from_raw(cs2_pid.as_u32() as i32))?;
         let (client_base_address, client_size) = memory.get_module("libclient.so")?;
         let (engine2_base_address, engine2_size) = memory.get_module("libengine2.so")?;
 
-        // let local_player_pawn_address: usize = memory.read::<usize>(
-        //     client_base_address + cs2::linux::offsets::client_dll::dwLocalPlayerPawn,
-        // )?;
-        let local_player_pawn_address: usize = 0;
+        debug!(
+            "client base address: 0x{:x} size: {}",
+            client_base_address, client_size
+        );
 
-        Ok(Self {
-            local_player_pawn_address,
-            client_base_address,
-            client_size,
-            memory,
-            global_vars: GlobalVarsBase {
-                real_time: todo!(),
-                frame_count: todo!(),
-                frame_time: todo!(),
-                absolute_frame_time: todo!(),
-                max_clients: todo!(),
-                pad_0: todo!(),
-                frame_time_2: todo!(),
-                current_time: todo!(),
-                current_time_2: todo!(),
-                pad_1: todo!(),
-                tick_count: todo!(),
-                pad_2: todo!(),
-                network_channel: todo!(),
-                pad_3: todo!(),
-                current_map: todo!(),
-                current_map_name: todo!(),
+        debug!(
+            "engine2 base address: 0x{:x} size: {}",
+            engine2_base_address, engine2_size
+        );
+
+        let modules = vec![
+            Module {
+                name: "libclient.so".to_string(),
+                base_address: client_base_address,
+                size: client_size,
             },
-        })
+            Module {
+                name: "libengine2.so".to_string(),
+                base_address: engine2_base_address,
+                size: engine2_size,
+            },
+        ];
+
+        Ok(Self { modules, memory })
     }
 
     fn get_memory(&self) -> &LinuxMemory {
-        todo!()
+        &self.memory
     }
 
-    fn get_client_size(&self) -> usize {
-        todo!()
+    fn get_module(&self, name: &str) -> Option<&Module> {
+        self.modules.iter().find(|module| module.name == name)
     }
-
-    fn get_client_base_address(&self) -> usize {
-        todo!()
-    }
-
-    fn get_local_player_pawn_address(&self) -> usize {
-        todo!()
-    }
-
-    fn get_global_vars(&self) -> &GlobalVarsBase {
-        todo!()
-    }
-}
-
-#[derive(Debug)]
-#[repr(C)]
-pub struct GlobalVarsBase {
-    real_time: f32,                  // 0x0000
-    frame_count: i32,                // 0x0004
-    frame_time: f32,                 // 0x0008
-    absolute_frame_time: f32,        // 0x000C
-    max_clients: i32,                // 0x0010
-    pad_0: [u8; 0x14],               // 0x0014
-    frame_time_2: f32,               // 0x0028
-    current_time: f32,               // 0x002C
-    current_time_2: f32,             // 0x0030
-    pad_1: [u8; 0xC],                // 0x0034
-    tick_count: f32,                 // 0x0040
-    pad_2: [u8; 0x4],                // 0x0044
-    network_channel: *const c_void,  // 0x0048
-    pad_3: [u8; 0x130],              // 0x0050
-    current_map: *const c_char,      // 0x0180
-    current_map_name: *const c_char, // 0x0188
 }
 
 #[cfg(target_os = "windows")]
