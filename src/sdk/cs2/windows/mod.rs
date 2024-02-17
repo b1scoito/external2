@@ -1,2 +1,2 @@
-pub(crate) mod offsets;
-pub(crate) mod interfaces;
+pub mod offsets;
+pub mod interfaces;

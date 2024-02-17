@@ -1,1 +1,1 @@
-pub(crate) mod bhop;
+pub mod bhop;

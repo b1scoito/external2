@@ -1,6 +1,7 @@
 use cheats::bhop;
 use color_eyre::Result;
 
+use sdk::entity::Entity;
 #[cfg(target_os = "linux")]
 use sdk::{LinuxSdk, Sdk};
 
@@ -27,8 +28,10 @@ fn main() -> Result<()> {
     #[cfg(target_os = "windows")]
     let sdk = WindowsSdk::new()?;
 
+    let entity = Entity::new(sdk)?;
+
     // Start cheats
-    bhop::init(sdk)?;
+    bhop::init(entity)?;
 
     Ok(())
 }

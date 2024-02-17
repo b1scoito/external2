@@ -12,6 +12,9 @@ use nix::{
     unistd::Pid,
 };
 
+#[cfg(target_os = "windows")]
+use widestring::WideString;
+
 #[cfg(target_os = "linux")]
 use std::io::{IoSlice, IoSliceMut};
 
@@ -32,9 +35,6 @@ use windows::Win32::{
 
 #[cfg(target_os = "windows")]
 use sysinfo::Pid;
-
-#[cfg(target_os = "windows")]
-use std::os::windows::ffi::OsStringExt;
 
 #[cfg(target_os = "linux")]
 pub struct Linux {
@@ -243,7 +243,7 @@ impl Memory for Windows {
 
             if Module32FirstW(snapshot, &mut entry).is_ok() {
                 loop {
-                    let module_name = OsString::from_wide(&entry.szModule).into_string().unwrap();
+                    let module_name = WideString::from_vec(&entry.szModule).to_string()?.split('\0').next().unwrap().to_string();
                     if module_name.starts_with(mod_name) {
                         CloseHandle(snapshot)?;
                         return Ok(Module {

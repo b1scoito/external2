@@ -4,7 +4,6 @@
  */
 
  #![allow(non_snake_case, non_upper_case_globals, dead_code)]
-
 pub mod animationsystem_dll { // animationsystem.dll
     pub const AnimationSystemUtils_001: usize = 0x72E80;
     pub const AnimationSystem_001: usize = 0x6DA00;
