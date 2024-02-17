@@ -9,7 +9,8 @@ use crate::memory::{Linux, Memory};
 #[cfg(target_os = "windows")]
 use crate::memory::{Memory, Windows};
 
-pub(crate) mod cs2;
+pub mod cs2;
+pub mod entity;
 
 // TODO: Is this the best way to make this cross-platform?
 #[cfg(target_os = "linux")]
@@ -104,61 +105,40 @@ impl Sdk for WindowsSdk {
         debug!("found game process with pid: {}", cs2_pid);
 
         let memory: Windows = Memory::new(cs2_pid.into())?;
-        let (client_base_address, client_size) = memory.get_module("client.dll")?;
-        debug!(
-            "client base address: 0x{:x} size: {}",
-            client_base_address, client_size
-        );
+        let modules = vec![
+            memory.get_module("client.dll")?,
+            memory.get_module("engine2.dll")?,
+        ];
 
-        let (engine_base_address, engine_size) = memory.get_module("engine2.dll")?;
-        debug!(
-            "engine base address: 0x{:x} size: {}",
-            engine_base_address, engine_size
-        );
-
-        let local_player_pawn_address: usize = memory.read::<usize>(
-            client_base_address + cs2::windows::offsets::client_dll::dwLocalPlayerPawn,
-        )?;
-        debug!(
-            "local player pawn address: 0x{:x}",
-            local_player_pawn_address
-        );
-
-        debug!(
-            "global vars addres: {}",
-            client_base_address + cs2::windows::offsets::client_dll::dwGlobalVars
-        );
-
-        let global_vars = memory.read::<GlobalVarsBase>(
-            client_base_address + cs2::windows::offsets::client_dll::dwGlobalVars,
-        )?;
+        debug!("Modules found: {:?}", modules);
 
         Ok(Self {
-            local_player_pawn_address,
-            client_base_address,
-            client_size,
             memory,
-            global_vars,
+            modules,
         })
-    }
-
-    fn get_local_player_pawn_address(&self) -> usize {
-        self.local_player_pawn_address
-    }
-
-    fn get_client_base_address(&self) -> usize {
-        self.client_base_address
-    }
-
-    fn get_client_size(&self) -> usize {
-        self.client_size
     }
 
     fn get_memory(&self) -> &Windows {
         &self.memory
     }
 
-    fn get_global_vars(&self) -> &GlobalVarsBase {
-        &self.global_vars
+    fn get_module(&self, name: &str) -> Option<&Module> {
+        match name {
+            "client" => {
+                #[cfg(target_os = "windows")]
+                return self.modules.iter().find(|module| module.name == "client.dll");
+
+                #[cfg(target_os = "linux")]
+                return self.modules.iter().find(|module| module.name == "libclient.so");
+            },
+            "engine2" => {
+                #[cfg(target_os = "windows")]
+                return self.modules.iter().find(|module| module.name == "engine2.dll");
+
+                #[cfg(target_os = "linux")]
+                return self.modules.iter().find(|module| module.name == "libengine2.so");
+            },
+            _ => None,
+        }
     }
 }
