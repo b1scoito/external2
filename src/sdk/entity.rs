@@ -1,41 +1,49 @@
+use color_eyre::eyre::{self, Result};
+
 use crate::memory::Memory;
 
-#[cfg(target_os = "windows")]
-use super::{cs2, Sdk, WindowsSdk};
-
-#[cfg(target_os = "linux")]
-use super::{cs2, Sdk, LinuxSdk};
-
-use color_eyre::eyre::Result;
-use log::debug;
-
+use super::{cs2, Sdk};
 
 pub struct Entity {
-    #[cfg(target_os = "windows")]
-    sdk: WindowsSdk,
-    #[cfg(target_os = "linux")]
-    sdk: LinuxSdk,
+    sdk: Box<dyn Sdk>,
 }
 
 impl Entity {
     #[inline]
-    #[cfg(target_os = "windows")]
-    pub fn new(sdk: WindowsSdk) -> Result<Self> {
-        Ok(Self {sdk})
+    pub fn new(sdk: Box<dyn Sdk>) -> Result<Self> {
+        Ok(Self { sdk })
     }
 
     #[inline]
-    #[cfg(target_os = "linux")]
-    pub fn new(sdk: LinuxSdk) -> Result<Self> {
-        Ok(Self {sdk})
-    }
+    pub fn get_local_player(&self) -> Result<usize> {
+        let offset = if cfg!(target_os = "windows") {
+            cs2::windows::offsets::client_dll::dwLocalPlayerPawn
+        } else if cfg!(target_os = "linux") {
+            // cs2::linux::offsets::client_dll::dwLocalPlayerPawn
+            0x0
+        } else {
+            return Err(eyre::eyre!("unsupported platform"));
+        };
 
-    #[inline]
-    pub fn get_local_player_pawn_address(&self) -> Result<usize> {
-        Ok(self.sdk.get_memory().read::<usize>(self.sdk.get_module("client").unwrap().base_address + cs2::windows::offsets::client_dll::dwLocalPlayerPawn)?)
+        let module = if cfg!(target_os = "windows") {
+            "client.dll"
+        } else if cfg!(target_os = "linux") {
+            "libclient.so"
+        } else {
+            return Err(eyre::eyre!("unsupported platform"));
+        };
+
+        let local_player_addr = self
+            .sdk
+            .get_memory()
+            .read::<usize>(self.sdk.get_module(module).unwrap().base_address + offset)?;
+
+        Ok(local_player_addr)
     }
 
     pub fn get_local_player_flags(&self) -> Result<i32> {
-        Ok(self.sdk.get_memory().read::<i32>(self.get_local_player_pawn_address()? + cs2::windows::interfaces::client::C_BaseEntity::m_fFlags)?)
+        Ok(self.sdk.get_memory().read::<i32>(
+            self.get_local_player()? + cs2::windows::interfaces::client::C_BaseEntity::m_fFlags,
+        )?)
     }
 }

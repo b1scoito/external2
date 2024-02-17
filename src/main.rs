@@ -2,11 +2,7 @@ use cheats::bhop;
 use color_eyre::Result;
 
 use sdk::entity::Entity;
-#[cfg(target_os = "linux")]
-use sdk::{LinuxSdk, Sdk};
 
-#[cfg(target_os = "windows")]
-use sdk::{Sdk, WindowsSdk};
 use tracing_subscriber::filter::LevelFilter;
 
 mod cheats;
@@ -14,20 +10,15 @@ mod memory;
 mod sdk;
 
 fn main() -> Result<()> {
-    // Setup the application
+    // Setup logging and color_eyre
     setup()?;
 
     // Initialize the SDK
-    #[cfg(target_os = "linux")]
-    let sdk = LinuxSdk::new()?;
-
-    #[cfg(target_os = "windows")]
-    let sdk = WindowsSdk::new()?;
-
-    let entity = Entity::new(sdk)?;
+    let sdk = sdk::initialize()?;
+    let local_player = Entity::new(sdk)?;
 
     // Start cheats
-    bhop::init(entity)?;
+    bhop::init(local_player)?;
 
     Ok(())
 }

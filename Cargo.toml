@@ -12,11 +12,10 @@ regex = "1.10.2"
 sysinfo = "0.30.5"
 tracing-subscriber = "0.3.18"
 
-[target.'cfg(linux)'.dependencies]
+[target.'cfg(unix)'.dependencies]
 nix = { version = "0.27.1", features = ["uio", "process"] }
 proc-maps = "0.3.2"
 
 [target.'cfg(windows)'.dependencies]
 widestring = "1.0.2"
-winapi = { version = "0.3.9", features = ["tlhelp32", "wow64apiset", "winuser"] }
 windows = { version = "0.52.0", features = ["Win32_Foundation", "Win32_System_Diagnostics_ToolHelp", "System", "Foundation_Collections"] }

@@ -10,11 +10,6 @@ pub fn init(entity: Entity) -> Result<()> {
     info!("initializing bhop cheat");
 
     loop {
-        #[cfg(target_os = "windows")]
-        if (unsafe { GetAsyncKeyState(VK_SPACE) } == 0) {
-            continue;
-        }
-
         let player_flags = entity.get_local_player_flags()?;
         if player_flags & 1 << 0 != 0 {
             debug!("jumping");

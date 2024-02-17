@@ -197,7 +197,6 @@ dependencies = [
  "sysinfo",
  "tracing-subscriber",
  "widestring",
- "winapi",
  "windows",
 ]
 
