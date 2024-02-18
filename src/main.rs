@@ -25,6 +25,7 @@ fn main() -> Result<()> {
                 bhop::init(cs2_sdk)
             });
 
+            log::info!("press any key to exit");
             // Wait for any key to be pressed
             let _ = std::io::stdin().read_line(&mut String::new());
         },
