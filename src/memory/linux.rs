@@ -6,11 +6,11 @@ use std::io::{IoSlice, IoSliceMut};
 
 use super::{Memory, Module};
 
-pub struct LinuxMemory {
+pub struct Linux {
     pub process_pid: Pid,
 }
 
-impl Memory for LinuxMemory {
+impl Memory for Linux {
     /// Creates a new [`LinuxMemory`].
     fn new(process_pid: Pid) -> Result<Self> {
         Ok(Self { process_pid })
@@ -29,10 +29,8 @@ impl Memory for LinuxMemory {
                     if filename.to_string_lossy().contains(mod_name) && map.is_exec() {
                         return Ok(Module {
                             name: filename.to_string_lossy().to_string(),
-
                             base_address: map.start() as usize,
-
-                            size: map.start() as usize,
+                            size: map.size() as usize,
                         });
                     }
                 }

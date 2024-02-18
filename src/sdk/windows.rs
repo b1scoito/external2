@@ -5,7 +5,7 @@ pub struct WindowsSdk {
 
 #[cfg(target_os = "windows")]
 impl Sdk for WindowsSdk {
-    fn new() -> Result<WindowsSdk> {
+    fn new() -> Result<Self> {
         info!("initializing windows sdk");
 
         // System

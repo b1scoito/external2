@@ -2,13 +2,13 @@ use color_eyre::eyre::{self, Result};
 use log::{debug, info};
 use sysinfo::{Pid, System};
 
-use crate::memory::{linux::LinuxMemory, Memory, Module};
+use crate::memory::{linux::Linux, Memory, Module};
 
 use super::Sdk;
 
 pub struct LinuxSdk {
     modules: Vec<Module>,
-    memory: LinuxMemory,
+    memory: Linux,
 }
 
 impl Sdk for LinuxSdk {
@@ -34,7 +34,7 @@ impl Sdk for LinuxSdk {
         }
 
         // Get cs2 process ID
-        let memory = LinuxMemory::new(cs2_pid)?;
+        let memory = Linux::new(cs2_pid)?;
 
         let modules = vec![
             memory.get_module("libclient.so")?,
@@ -46,7 +46,7 @@ impl Sdk for LinuxSdk {
         Ok(Self { modules, memory })
     }
 
-    fn get_memory(&self) -> &LinuxMemory {
+    fn get_memory(&self) -> &Linux {
         &self.memory
     }
 
