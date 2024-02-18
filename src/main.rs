@@ -1,8 +1,9 @@
+use std::thread;
+
 use cheats::bhop;
-use color_eyre::Result;
+use color_eyre::{eyre, Result};
 
-use sdk::entity::Entity;
-
+use sdk::{cs2::Cs2, External2Game};
 use tracing_subscriber::filter::LevelFilter;
 
 mod cheats;
@@ -14,11 +15,21 @@ fn main() -> Result<()> {
     setup()?;
 
     // Initialize the SDK
-    let sdk = sdk::initialize()?;
-    let local_player = Entity::new(sdk)?;
+    let platform_sdk = sdk::initialize()?;
+    match platform_sdk.get_game() {
+        External2Game::Cs2 => {
+            log::info!("external2 detected game: Counter-Strike 2");
 
-    // Start cheats
-    bhop::init(local_player)?;
+            let cs2_sdk = Cs2::new(platform_sdk)?;
+            thread::spawn(move || {
+                bhop::init(cs2_sdk)
+            });
+
+            // Wait for any key to be pressed
+            let _ = std::io::stdin().read_line(&mut String::new());
+        },
+        _ => return Err(eyre::eyre!("unsupported game")),
+    }
 
     Ok(())
 }

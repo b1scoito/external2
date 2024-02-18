@@ -1,3 +1,5 @@
+use color_eyre::eyre::{self, Result};
+use sysinfo::Pid;
 use windows::Win32::{
     Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE},
     System::{
@@ -14,16 +16,19 @@ use windows::Win32::{
 
 use widestring::WideString;
 
-pub struct WindowsMemory {
+use super::{Memory, Module};
+
+pub struct Windows {
     pub process_pid: Pid,
     pub process_handle: HANDLE,
 }
 
-impl Memory for WindowsMemory {
+impl Memory for Windows {
     /// Creates a new [`Windows`].
-    fn new(process_pid: Pid) -> Result<WindowsMemory> {
+    fn new(process_pid: Pid) -> Result<Self> {
         let process_handle =
             unsafe { OpenProcess(PROCESS_ALL_ACCESS, false, process_pid.as_u32())? };
+
         Ok(Self {
             process_pid,
             process_handle,
@@ -33,31 +38,14 @@ impl Memory for WindowsMemory {
     /// Read memory from a process
     fn read<T>(&self, address: usize) -> Result<T> {
         let mut buffer = vec![0; std::mem::size_of::<T>()];
-        unsafe {
-            ReadProcessMemory(
-                self.process_handle,
-                address as *const _,
-                buffer.as_mut_ptr() as *mut _,
-                std::mem::size_of::<T>(),
-                Some(std::ptr::null_mut()),
-            )?
-        };
+        unsafe { ReadProcessMemory(self.process_handle, address as *const _, buffer.as_mut_ptr() as *mut _, std::mem::size_of::<T>(), Some(std::ptr::null_mut()))? };
 
-        Ok(unsafe { std::ptr::read(buffer.as_ptr() as *const T) })
-    }
+        Ok(unsafe { std::ptr::read(buffer.as_ptr() as *const T) })    }
 
     /// Read memory from a process into a buffer
     fn read_into(&self, address: usize, buffer: &mut [u8]) -> Result<usize> {
         let buffer_len = buffer.len();
-        unsafe {
-            ReadProcessMemory(
-                self.process_handle,
-                address as *const _,
-                buffer.as_mut_ptr() as *mut _,
-                buffer_len,
-                Some(std::ptr::null_mut()),
-            )?
-        };
+        unsafe { ReadProcessMemory(self.process_handle, address as *const _, buffer.as_mut_ptr() as *mut _, buffer_len, Some(std::ptr::null_mut()))? };
 
         Ok(buffer_len)
     }
@@ -68,15 +56,7 @@ impl Memory for WindowsMemory {
             std::slice::from_raw_parts(&value as *const T as *const u8, std::mem::size_of::<T>())
         };
 
-        unsafe {
-            WriteProcessMemory(
-                self.process_handle,
-                address as *const _,
-                buffer.as_ptr() as *mut _,
-                std::mem::size_of::<T>(),
-                Some(std::ptr::null_mut()),
-            )?
-        };
+        unsafe { WriteProcessMemory(self.process_handle, address as *const _, buffer.as_ptr() as *mut _, std::mem::size_of::<T>(), Some(std::ptr::null_mut()))? };
 
         Ok(())
     }
@@ -97,7 +77,7 @@ impl Memory for WindowsMemory {
                 loop {
                     let module_name = WideString::from_vec(&entry.szModule)
                         .to_string()?
-                        .split('\0')
+                        .split('\0') // Split by null terminator
                         .next()
                         .unwrap()
                         .to_string();
@@ -118,6 +98,14 @@ impl Memory for WindowsMemory {
 
             CloseHandle(snapshot)?;
             Err(eyre::eyre!("Module not found"))
+        }
+    }
+}
+
+impl Drop for Windows {
+    fn drop(&mut self) {
+        unsafe {
+            CloseHandle(self.process_handle).unwrap();
         }
     }
 }

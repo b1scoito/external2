@@ -1,34 +1,19 @@
 use color_eyre::eyre::Result;
-use log::{debug, info};
 
-#[cfg(target_os = "windows")]
-use winapi::um::winuser::{GetAsyncKeyState, VK_SPACE};
+use crate::sdk::cs2::{structures::EntityFlag, Cs2, LocalPlayer};
 
-use crate::sdk::entity::Entity;
-
-pub fn init(entity: Entity) -> Result<()> {
-    info!("initializing bhop cheat");
+pub fn init(cs2: Cs2) -> Result<()> {
+    log::info!("initializing bhop cheat");
 
     loop {
-        let player_flags = entity.get_local_player_flags()?;
-        if player_flags & 1 << 0 != 0 {
-            debug!("jumping");
-            // sdk.get_memory().write::<i32>(
-            //     sdk.get_client_base_address() + cs2::windows::offsets::client_dll::dwForceJump,
-            //     65537,
-            // )?;
+        let flags = cs2.flags()?;
+
+        if flags & EntityFlag::FL_ONGROUND == 1 {
+            log::debug!("onground");
+            // sdk.set_jump()?;
         } else {
-            debug!("not jumping")
-            // if sdk.get_memory().read::<i32>(
-            //     sdk.get_client_base_address() + cs2::windows::offsets::client_dll::dwForceJump,
-            // )? == 65537
-            // {
-            //     debug!("not jumping");
-            //     sdk.get_memory().write::<i32>(
-            //         sdk.get_client_base_address() + cs2::windows::offsets::client_dll::dwForceJump,
-            //         256,
-            //     )?;
-            // }
+            log::debug!("in air");
+            // sdk.unset_jump()?;
         }
     }
 }

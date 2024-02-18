@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 /// Memory module
 ///
 /// This module contains the [`Memory`] trait and its implementations.
@@ -17,6 +19,7 @@ pub struct Module {
     pub base_address: usize,
     pub size: usize,
 }
+
 pub trait Memory {
     fn new(process_pid: Pid) -> Result<Self>
     where

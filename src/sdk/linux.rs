@@ -1,5 +1,4 @@
 use color_eyre::eyre::{self, Result};
-use log::{debug, info};
 use sysinfo::{Pid, System};
 
 use crate::memory::{linux::Linux, Memory, Module};
