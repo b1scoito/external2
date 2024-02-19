@@ -13,7 +13,7 @@ pub mod linux;
 #[cfg(target_os = "windows")]
 pub mod windows;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Module {
     pub name: String,
     pub base_address: usize,
@@ -29,7 +29,7 @@ pub trait Memory {
 
     // Read
     fn read<T>(&self, address: usize) -> Result<T>;
-    fn read_into(&self, address: usize, buffer: &mut [u8]) -> Result<usize>;
+    fn read_string(&self, address: usize) -> Result<String>;
 
     // Write
     fn write<T>(&self, address: usize, value: T) -> Result<()>;

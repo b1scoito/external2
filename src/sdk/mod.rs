@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use color_eyre::eyre::Result;
 #[cfg(target_os = "linux")]
 mod linux;
@@ -11,6 +13,11 @@ pub use linux::LinuxSdk as ExternalSdk;
 #[cfg(target_os = "windows")]
 pub use windows::WindowsSdk as ExternalSdk;
 
+#[cfg(target_os = "linux")]
+pub use crate::memory::linux::Linux as PlatformMemory;
+#[cfg(target_os = "windows")]
+pub use crate::memory::windows::Windows as PlatformMemory;
+
 pub mod cs2;
 
 // TODO: SDK Initialization does not need to be separate for each platform
@@ -23,7 +30,7 @@ impl External2Game {
     fn process_names() -> Vec<(&'static str, External2Game)> {
         vec![
             #[cfg(target_os = "linux")]
-            ("cs2_linux", External2Game::Cs2),
+            ("cs2", External2Game::Cs2),
             #[cfg(target_os = "windows")]
             ("cs2.exe", External2Game::Cs2),
         ]
@@ -32,10 +39,7 @@ impl External2Game {
 
 pub trait Sdk: Send + Sync {
     fn get_module(&self, name: &str) -> Option<&Module>;
-    #[cfg(target_os = "linux")]
-    fn get_memory(&self) -> &crate::memory::linux::Linux;
-    #[cfg(target_os = "windows")]
-    fn get_memory(&self) -> &crate::memory::windows::Windows;
+    fn get_memory(&self) -> &PlatformMemory;
 
     fn get_game(&self) -> External2Game;
 
@@ -44,6 +48,6 @@ pub trait Sdk: Send + Sync {
         Self: Sized;
 }
 
-pub fn initialize() -> Result<Box<dyn Sdk>> {
-    Ok(Box::new(ExternalSdk::new()?))
+pub fn initialize() -> Result<Arc<dyn Sdk>> {
+    Ok(Arc::new(ExternalSdk::new()?))
 }

@@ -1,7 +1,7 @@
 use std::thread;
 
 use cheats::bhop;
-use color_eyre::{eyre, Result};
+use color_eyre::Result;
 
 use sdk::{cs2::Cs2, External2Game};
 use tracing_subscriber::filter::LevelFilter;
@@ -22,14 +22,13 @@ fn main() -> Result<()> {
 
             let cs2_sdk = Cs2::new(platform_sdk)?;
             thread::spawn(move || {
-                bhop::init(cs2_sdk)
+                bhop::initialize(cs2_sdk)
             });
 
-            log::info!("press any key to exit");
             // Wait for any key to be pressed
+            log::warn!("press any key to exit");
             let _ = std::io::stdin().read_line(&mut String::new());
         },
-        _ => return Err(eyre::eyre!("unsupported game")),
     }
 
     Ok(())

@@ -7,13 +7,13 @@ use crate::{memory::{windows::Windows, Memory, Module}, sdk::External2Game};
 
 use super::Sdk;
 
+#[derive(Debug, Clone)]
 pub struct WindowsSdk {
     modules: Vec<Module>,
     memory: Windows,
     game: External2Game,
 }
 
-#[cfg(target_os = "windows")]
 impl Sdk for WindowsSdk {
     fn new() -> Result<Self> {
         log::info!("initializing windows sdk");
@@ -26,10 +26,10 @@ impl Sdk for WindowsSdk {
             system.refresh_all();
     
             for (process_name, game) in External2Game::process_names() {
-                let game_pids = system.processes_by_exact_name(process_name);
-                for game_proc in game_pids {
+                let processes = system.processes_by_exact_name(process_name);
+                for process in processes {
                     found_game = Some(game);
-                    game_pid = game_proc.pid();
+                    game_pid = process.pid();
                     break;
                 }
     
@@ -70,6 +70,7 @@ impl Sdk for WindowsSdk {
 
                         modules.push(memory.get_module("client.dll")?);
                         modules.push(memory.get_module("engine2.dll")?);
+                        modules.push(memory.get_module("inputsystem.dll")?);
                     
                         log::info!("Modules loaded: {:?}", modules);
                     },

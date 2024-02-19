@@ -18,6 +18,7 @@ use widestring::WideString;
 
 use super::{Memory, Module};
 
+#[derive(Debug, Clone)]
 pub struct Windows {
     pub process_pid: Pid,
     pub process_handle: HANDLE,
@@ -40,14 +41,20 @@ impl Memory for Windows {
         let mut buffer = vec![0; std::mem::size_of::<T>()];
         unsafe { ReadProcessMemory(self.process_handle, address as *const _, buffer.as_mut_ptr() as *mut _, std::mem::size_of::<T>(), Some(std::ptr::null_mut()))? };
 
-        Ok(unsafe { std::ptr::read(buffer.as_ptr() as *const T) })    }
+        Ok(unsafe { std::ptr::read(buffer.as_ptr() as *const T) })    
+    }
 
-    /// Read memory from a process into a buffer
-    fn read_into(&self, address: usize, buffer: &mut [u8]) -> Result<usize> {
-        let buffer_len = buffer.len();
-        unsafe { ReadProcessMemory(self.process_handle, address as *const _, buffer.as_mut_ptr() as *mut _, buffer_len, Some(std::ptr::null_mut()))? };
+    fn read_string(&self, address: usize) -> Result<String> {
+        let mut buffer = Vec::new();
 
-        Ok(buffer_len)
+        for i in 0.. {
+            match self.read::<u8>(address + i) {
+                Ok(byte) if byte != 0 => buffer.push(byte),
+                _ => break,
+            }
+        }
+
+        Ok(String::from_utf8(buffer)?)   
     }
 
     /// Write memory to a process

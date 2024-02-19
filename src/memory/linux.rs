@@ -65,29 +65,6 @@ impl Memory for Linux {
         Ok(unsafe { std::ptr::read(buffer.as_ptr() as *const T) })
     }
 
-    fn read_into(&self, address: usize, buffer: &mut [u8]) -> Result<usize> {
-        let buffer_len = buffer.len();
-
-        let bytes_read = process_vm_readv(
-            nix::unistd::Pid::from_raw(self.process_pid.as_u32() as i32),
-            &mut [IoSliceMut::new(buffer)],
-            &[uio::RemoteIoVec {
-                base: address,
-
-                len: buffer_len,
-            }],
-        )?;
-
-        if bytes_read != buffer_len {
-            return Err(eyre::eyre!(
-                "Failed to read memory from process: {}",
-                self.process_pid
-            ));
-        }
-
-        Ok(bytes_read)
-    }
-
     fn write<T>(&self, address: usize, value: T) -> Result<()> {
         let buffer = unsafe {
             std::slice::from_raw_parts(&value as *const T as *const u8, std::mem::size_of::<T>())

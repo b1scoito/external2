@@ -1,3 +1,7 @@
+#![allow(non_snake_case, non_camel_case_types, dead_code)]
+
+use std::ffi::{c_char, c_void};
+
 pub struct EntityFlag;
 
 impl EntityFlag {
@@ -30,4 +34,44 @@ impl EntityFlag {
     pub const FL_DISSOLVING: u32 = 1 << 28;
     pub const FL_TRANSRAGDOLL: u32 = 1 << 29;
     pub const FL_UNBLOCKABLE_BY_PLAYER: u32 = 1 << 30;
+}
+
+#[derive(Debug)]
+#[repr(C)]
+pub struct GlobalVarsBase {
+    pub real_time: f32,                  // 0x0000
+    pub frame_count: i32,                // 0x0004
+    pub frame_time: f32,                 // 0x0008
+    pub absolute_frame_time: f32,        // 0x000C
+    pub max_clients: i32,                // 0x0010
+    pub pad_0: [u8; 0x14],               // 0x0014
+    pub frame_time_2: f32,               // 0x0028
+    pub current_time: f32,               // 0x002C
+    pub current_time_2: f32,             // 0x0030
+    pub pad_1: [u8; 0xC],                // 0x0034
+    pub tick_count: f32,                 // 0x0040
+    pub pad_2: [u8; 0x4],                // 0x0044
+    pub network_channel: *const c_void,  // 0x0048
+    pub pad_3: [u8; 0x130],              // 0x0050
+    pub current_map: *const c_char,      // 0x0180
+    pub current_map_name: *const c_char, // 0x0188
+}
+
+
+#[derive(Debug)]
+#[repr(C)]
+pub enum MoveType
+{
+	MOVETYPE_NONE,
+	MOVETYPE_OBSOLETE,
+	MOVETYPE_WALK,
+	MOVETYPE_STEP,
+	MOVETYPE_FLY,
+	MOVETYPE_FLYGRAVITY,
+	MOVETYPE_VPHYSICS,
+	MOVETYPE_PUSH,
+	MOVETYPE_NOCLIP,
+	MOVETYPE_OBSERVER,
+	MOVETYPE_LADDER,
+	MOVETYPE_CUSTOM,
 }

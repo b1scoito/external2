@@ -3,29 +3,63 @@
 mod windows;
 pub mod structures;
 
+use std::{arch::x86_64::_bittest, sync::Arc};
+
 use color_eyre::eyre::{self, Result};
-use crate::memory::Memory;
+use crate::{memory::Memory, sdk::cs2::structures::GlobalVarsBase};
 use super::{cs2, Sdk};
 
 pub struct Cs2 {
-    sdk: Box<dyn Sdk>,
+    sdk: Arc<dyn Sdk>,
+}
+
+pub struct LocalPlayerImpl {
+    pub local_player_address: usize,
+    pub sdk: Arc<dyn Sdk>,
 }
 
 pub trait LocalPlayer {
+    fn move_type(&self) -> Result<u32>;
     fn flags(&self) -> Result<u32>;
+}
+
+pub trait Client {
+    fn get_local_player(&self) -> Result<LocalPlayerImpl>;
+    fn get_global_vars(&self) -> Result<GlobalVarsBase>;
+    fn get_current_map_name(&self) -> Result<String>;
     fn set_jump(&self) -> Result<()>;
     fn unset_jump(&self) -> Result<()>;
     fn get_jump(&self) -> Result<u32>;
 }
 
+pub trait Input {
+    fn is_key_down(&self, key: u32) -> Result<bool>;
+}
+
+
 impl Cs2 {
     #[inline]
-    pub fn new(sdk: Box<dyn Sdk>) -> Result<Self> {
+    pub fn new(sdk: Arc<dyn Sdk>) -> Result<Self> {
         Ok(Self { sdk })
     }
+}
 
+
+impl LocalPlayer for LocalPlayerImpl {
     #[inline]
-    pub fn get_local_player(&self) -> Result<usize> {
+    fn flags(&self) -> Result<u32> {
+        Ok(self.sdk.get_memory().read::<u32>(self.local_player_address + cs2::windows::interfaces::client::C_BaseEntity::m_fFlags)?)
+    }
+
+    fn move_type(&self) -> Result<u32> {
+        let move_type = self.sdk.get_memory().read::<u32>(self.local_player_address + cs2::windows::interfaces::client::C_BaseEntity::m_MoveType)?;
+        log::debug!("move_type: {}", move_type);
+        Ok(move_type)
+    }
+}
+
+impl Client for Cs2 {
+    fn get_local_player(&self) -> Result<LocalPlayerImpl> {
         let offset = if cfg!(target_os = "windows") {
             cs2::windows::offsets::client_dll::dwLocalPlayerPawn
         } else if cfg!(target_os = "linux") {
@@ -62,38 +96,61 @@ impl Cs2 {
             }
         }            
 
-        Ok(local_player_addr)
+        Ok(LocalPlayerImpl {
+            local_player_address: local_player_addr,
+            sdk: self.sdk.clone(),
+        })
     }
-}
+    
+    fn get_global_vars(&self) -> Result<GlobalVarsBase> {
+        let global_vars_address = self.sdk.get_memory().read::<*const cs2::structures::GlobalVarsBase>(
+            self.sdk.get_module("client.dll").unwrap().base_address + cs2::windows::offsets::client_dll::dwGlobalVars,
+        )?;
 
-impl LocalPlayer for Cs2 {
-    fn flags(&self) -> Result<u32> {
-        Ok(self.sdk.get_memory().read::<u32>(
-            self.get_local_player()? + cs2::windows::interfaces::client::C_BaseEntity::m_fFlags,
+        let global_vars: GlobalVarsBase = self.sdk.get_memory().read(global_vars_address as usize)?;
+
+        Ok(global_vars)
+    }
+
+    #[inline]
+    fn get_current_map_name(&self) -> Result<String> {
+        Ok(self.sdk.get_memory().read_string(self.get_global_vars()?.current_map as usize)?)
+    }
+
+    #[inline]
+    fn set_jump(&self) -> Result<()> {
+        Ok(self.sdk.get_memory().write::<u32>(
+                    self.sdk.get_module("client.dll").unwrap().base_address + cs2::windows::offsets::client_dll::dwForceJump,
+                    65537,
+                )?)
+    }
+
+    #[inline]
+    fn unset_jump(&self) -> Result<()> {
+        Ok(self.sdk.get_memory().write::<u32>(
+            self.sdk.get_module("client.dll").unwrap().base_address + cs2::windows::offsets::client_dll::dwForceJump,
+            255,
         )?)
     }
 
-    fn set_jump(&self) -> Result<()> {
-        self.sdk.get_memory().write::<u32>(
-            self.sdk.get_module("client.dll").unwrap().base_address + cs2::windows::offsets::client_dll::dwForceJump,
-            65537,
-        )?;
-        
-        Ok(())
-    }
-
-    fn unset_jump(&self) -> Result<()> {
-        self.sdk.get_memory().write::<u32>(
-            self.sdk.get_module("client.dll").unwrap().base_address + cs2::windows::offsets::client_dll::dwForceJump,
-            255,
-        )?;
-        
-        Ok(())
-    }
-
+    #[inline]
     fn get_jump(&self) -> Result<u32> {
         Ok(self.sdk.get_memory().read::<u32>(
             self.sdk.get_module("client.dll").unwrap().base_address + cs2::windows::offsets::client_dll::dwForceJump,
         )?)
+    }
+}
+
+impl Input for Cs2 {
+    fn is_key_down(&self, key: u32) -> Result<bool> {
+        let input_system = self.sdk.get_module("inputsystem.dll").unwrap().base_address + cs2::windows::offsets::inputsystem_dll::dwInputSystem;
+
+        let is_key_down = |key_code: i32| -> bool {
+            let key_map_element = self.sdk.get_memory().read::<i32>((input_system + 0x4 * (key_code as usize / 32) + 0x12A0).into()).unwrap_or(0);
+        
+            unsafe {_bittest(&key_map_element, key_code & 0x1F) != 0 }
+        };
+
+        Ok(is_key_down(key as i32))
     }
 }
