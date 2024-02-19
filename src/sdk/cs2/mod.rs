@@ -3,9 +3,11 @@
 mod windows;
 pub mod structures;
 
-use std::{arch::x86_64::_bittest, sync::Arc};
+use active_win_pos_rs::get_active_window;
+use std::sync::Arc;
 
-use color_eyre::eyre::{self, Result};
+use color_eyre::eyre::{self, Ok, Result};
+use rdev::Key;
 use crate::{memory::Memory, sdk::cs2::structures::GlobalVarsBase};
 use super::{cs2, Sdk};
 
@@ -33,7 +35,11 @@ pub trait Client {
 }
 
 pub trait Input {
-    fn is_key_down(&self, key: u32) -> Result<bool>;
+    fn is_key_down(&self, key: Key) -> Result<bool>;
+}
+
+pub trait System {
+    fn window_is_cs2(&self) -> Result<bool>;
 }
 
 
@@ -51,10 +57,9 @@ impl LocalPlayer for LocalPlayerImpl {
         Ok(self.sdk.get_memory().read::<u32>(self.local_player_address + cs2::windows::interfaces::client::C_BaseEntity::m_fFlags)?)
     }
 
+    #[inline]
     fn move_type(&self) -> Result<u32> {
-        let move_type = self.sdk.get_memory().read::<u32>(self.local_player_address + cs2::windows::interfaces::client::C_BaseEntity::m_MoveType)?;
-        log::debug!("move_type: {}", move_type);
-        Ok(move_type)
+        Ok(self.sdk.get_memory().read::<u32>(self.local_player_address + cs2::windows::interfaces::client::C_BaseEntity::m_MoveType)?)
     }
 }
 
@@ -142,15 +147,35 @@ impl Client for Cs2 {
 }
 
 impl Input for Cs2 {
-    fn is_key_down(&self, key: u32) -> Result<bool> {
-        let input_system = self.sdk.get_module("inputsystem.dll").unwrap().base_address + cs2::windows::offsets::inputsystem_dll::dwInputSystem;
+    fn is_key_down(&self, key: Key) -> Result<bool> {
+        // let input_system = self.sdk.get_module("inputsystem.dll").unwrap().base_address + cs2::windows::offsets::inputsystem_dll::dwInputSystem;
 
-        let is_key_down = |key_code: i32| -> bool {
-            let key_map_element = self.sdk.get_memory().read::<i32>((input_system + 0x4 * (key_code as usize / 32) + 0x12A0).into()).unwrap_or(0);
+        // let is_key_down = |key_code: i32| -> bool {
+        //     let key_map_element = self.sdk.get_memory().read::<i32>((input_system + 0x4 * (key_code as usize / 32) + 0x12A0).into()).unwrap_or(0);
         
-            unsafe {_bittest(&key_map_element, key_code & 0x1F) != 0 }
-        };
+        //     unsafe { _bittest(&key_map_element, key_code & 0x1F) != 0 }
+        // };
 
-        Ok(is_key_down(key as i32))
+        // Ok(is_key_down(key as i32))
+
+        Ok(self.sdk.get_input_system().is_key_down(key)?)
+    }
+}
+
+impl System for Cs2 {
+    fn window_is_cs2(&self) -> Result<bool> {
+        let active_window = get_active_window();
+        match active_window {
+            std::result::Result::Ok(window) => {
+                if window.title == "Counter-Strike 2" {
+                    return Ok(true);
+                } 
+            },
+            Err(e) => {
+                return Err(eyre::eyre!("Error getting active window: {:?}", e));
+            },
+        }
+
+        Ok(false)
     }
 }

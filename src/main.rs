@@ -1,9 +1,9 @@
-use std::thread;
+use std::{sync::Arc, thread};
 
 use cheats::bhop;
 use color_eyre::Result;
 
-use sdk::{cs2::Cs2, External2Game};
+use sdk::{cs2::Cs2, Games};
 use tracing_subscriber::filter::LevelFilter;
 
 mod cheats;
@@ -16,17 +16,22 @@ fn main() -> Result<()> {
 
     // Initialize the SDK
     let platform_sdk = sdk::initialize()?;
+    let platform_sdk_clone = Arc::clone(&platform_sdk);
+
+    thread::spawn(move || {
+        platform_sdk_clone.get_input_system().init_listen_callback()
+    });
+
     match platform_sdk.get_game() {
-        External2Game::Cs2 => {
-            log::info!("external2 detected game: Counter-Strike 2");
+        Games::Cs2 => {
+            log::info!("external2 detected game: counter-strike 2");
 
             let cs2_sdk = Cs2::new(platform_sdk)?;
             thread::spawn(move || {
-                bhop::initialize(cs2_sdk)
+                bhop::initialize(cs2_sdk).unwrap_or_else(|e| log::error!("bhop error: {}", e))
             });
 
             // Wait for any key to be pressed
-            log::warn!("press any key to exit");
             let _ = std::io::stdin().read_line(&mut String::new());
         },
     }

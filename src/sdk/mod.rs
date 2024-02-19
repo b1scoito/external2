@@ -18,21 +18,22 @@ pub use crate::memory::linux::Linux as PlatformMemory;
 #[cfg(target_os = "windows")]
 pub use crate::memory::windows::Windows as PlatformMemory;
 
+pub mod inputsystem;
 pub mod cs2;
 
 // TODO: SDK Initialization does not need to be separate for each platform
 #[derive(Debug, Clone, Copy)]
-pub enum External2Game {
+pub enum Games {
     Cs2,
 }
 
-impl External2Game {
-    fn process_names() -> Vec<(&'static str, External2Game)> {
+impl Games {
+    fn process_names() -> Vec<(&'static str, Games)> {
         vec![
             #[cfg(target_os = "linux")]
-            ("cs2", External2Game::Cs2),
+            ("cs2", Games::Cs2),
             #[cfg(target_os = "windows")]
-            ("cs2.exe", External2Game::Cs2),
+            ("cs2.exe", Games::Cs2),
         ]
     }
 }
@@ -41,7 +42,9 @@ pub trait Sdk: Send + Sync {
     fn get_module(&self, name: &str) -> Option<&Module>;
     fn get_memory(&self) -> &PlatformMemory;
 
-    fn get_game(&self) -> External2Game;
+    fn get_game(&self) -> Games;
+
+    fn get_input_system(&self) -> Arc<inputsystem::InputSystem>;
 
     fn new() -> Result<Self>
     where
