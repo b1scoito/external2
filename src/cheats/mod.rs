@@ -1,4 +1,4 @@
-use std::{thread, time::Duration};
+use std::{thread, time::{Duration, Instant}};
 
 use color_eyre::eyre::{self, Ok, Result};
 
@@ -9,6 +9,7 @@ pub mod bhop;
 struct CheatState {
     last_tick: f32,
     last_frame: i32,
+    elapsed_time: u128,
 }
 
 impl CheatState {
@@ -30,10 +31,21 @@ impl CheatState {
             return Err(eyre::eyre!("no need to update"));
         }
 
-        thread::sleep(Duration::from_secs_f32(global_vars.absolute_frame_time));
-
+        let delay = Duration::from_micros((Duration::from_secs_f32(global_vars.absolute_frame_time).as_micros() + self.elapsed_time).try_into().unwrap());
+        // log::trace!("delay: {:?}", delay);
+        thread::sleep(delay);
+        
+        let now = Instant::now();
         func(cs2)?;
+        let elapsed = now.elapsed().as_micros();
 
+        let elapsed_real = if elapsed > 15625 {
+            elapsed - 15625
+        } else {
+            elapsed
+        };
+
+        self.elapsed_time = elapsed_real;
         self.last_tick = global_vars.tick_count;
         self.last_frame = global_vars.frame_count;
 
@@ -47,6 +59,7 @@ impl Default for CheatState {
         Self {
             last_tick: 0.0,
             last_frame: 0,
+            elapsed_time: 0,
         }
     }
 }

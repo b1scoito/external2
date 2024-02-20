@@ -2,7 +2,7 @@ use std::{thread, time::Duration};
 
 use color_eyre::eyre::{self, Result};
 
-use crate::{cheats::CheatState, sdk::cs2::{structures::{EntityFlag, MoveType}, Client, Cs2, Input, LocalPlayer, System}};
+use crate::{cheats::CheatState, sdk::cs2::{structures::{EntityFlag, LifeState, MoveType}, Client, Cs2, Entity, Input, System}};
 
 
 // TODO: Make global init function with game sync global state, using GlobalVars
@@ -23,6 +23,11 @@ pub fn initialize(cs2: Cs2) -> Result<()> {
 
             let local_player = cs2.get_local_player()?;
             let move_type = local_player.move_type()?;
+            // let life_state = local_player.life_state()?;
+
+            // if life_state & LifeState::LIFE_ALIVE as u32 == 1 {
+            //     return Err(eyre::eyre!("local player is dead"));
+            // }
 
             if move_type == MoveType::MOVETYPE_LADDER as u32 || 
                 move_type == MoveType::MOVETYPE_NOCLIP as u32 ||
@@ -32,6 +37,7 @@ pub fn initialize(cs2: Cs2) -> Result<()> {
             
             if local_player.flags()? & EntityFlag::FL_ONGROUND == 1 {
                 // 1-tick for sub-tick?
+                // This probably needs to be compensated with the f
                 thread::sleep(Duration::from_micros(15625));
                 cs2.set_jump()?;
             } else {

@@ -15,18 +15,20 @@ pub struct Cs2 {
     sdk: Arc<dyn Sdk>,
 }
 
-pub struct LocalPlayerImpl {
-    pub local_player_address: usize,
+pub struct EntityImpl {
+    pub entity_address: usize,
     pub sdk: Arc<dyn Sdk>,
 }
 
-pub trait LocalPlayer {
+pub trait Entity {
+    fn health(&self) -> Result<u32>;
+    fn life_state(&self) -> Result<u32>;
     fn move_type(&self) -> Result<u32>;
     fn flags(&self) -> Result<u32>;
 }
 
 pub trait Client {
-    fn get_local_player(&self) -> Result<LocalPlayerImpl>;
+    fn get_local_player(&self) -> Result<EntityImpl>;
     fn get_global_vars(&self) -> Result<GlobalVarsBase>;
     fn get_current_map_name(&self) -> Result<String>;
     fn set_jump(&self) -> Result<()>;
@@ -51,20 +53,30 @@ impl Cs2 {
 }
 
 
-impl LocalPlayer for LocalPlayerImpl {
+impl Entity for EntityImpl {
     #[inline]
     fn flags(&self) -> Result<u32> {
-        Ok(self.sdk.get_memory().read::<u32>(self.local_player_address + cs2::windows::interfaces::client::C_BaseEntity::m_fFlags)?)
+        Ok(self.sdk.get_memory().read::<u32>(self.entity_address + cs2::windows::interfaces::client::C_BaseEntity::m_fFlags)?)
     }
 
     #[inline]
     fn move_type(&self) -> Result<u32> {
-        Ok(self.sdk.get_memory().read::<u32>(self.local_player_address + cs2::windows::interfaces::client::C_BaseEntity::m_MoveType)?)
+        Ok(self.sdk.get_memory().read::<u32>(self.entity_address + cs2::windows::interfaces::client::C_BaseEntity::m_MoveType)?)
+    }
+
+    #[inline]
+    fn life_state(&self) -> Result<u32> {
+        Ok(self.sdk.get_memory().read::<u32>(self.entity_address + cs2::windows::interfaces::client::C_BaseEntity::m_lifeState)?)
+    }
+
+    #[inline]
+    fn health(&self) -> Result<u32> {
+        Ok(self.sdk.get_memory().read::<u32>(self.entity_address + cs2::windows::interfaces::client::C_BaseEntity::m_iHealth)?)
     }
 }
 
 impl Client for Cs2 {
-    fn get_local_player(&self) -> Result<LocalPlayerImpl> {
+    fn get_local_player(&self) -> Result<EntityImpl> {
         let offset = if cfg!(target_os = "windows") {
             cs2::windows::offsets::client_dll::dwLocalPlayerPawn
         } else if cfg!(target_os = "linux") {
@@ -101,8 +113,8 @@ impl Client for Cs2 {
             }
         }            
 
-        Ok(LocalPlayerImpl {
-            local_player_address: local_player_addr,
+        Ok(EntityImpl {
+            entity_address: local_player_addr,
             sdk: self.sdk.clone(),
         })
     }
