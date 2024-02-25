@@ -5,6 +5,7 @@ use color_eyre::eyre::{self, Ok, Result};
 use crate::sdk::cs2::{Client, Cs2};
 
 pub mod bhop;
+pub mod esp;
 
 struct CheatState {
     last_tick: f32,
@@ -26,28 +27,19 @@ impl CheatState {
         // Only update each tick
         let update = global_vars.tick_count != self.last_tick || global_vars.frame_count != self.last_frame;
         if !update {
-            // Sleep for 1 tick
+            // Sleep for 1 tick?
             thread::sleep(Duration::from_micros(15625));
             return Err(eyre::eyre!("no need to update"));
         }
-
-        let delay = Duration::from_micros((Duration::from_secs_f32(global_vars.absolute_frame_time).as_micros() + self.elapsed_time).try_into().unwrap());
-        // log::trace!("delay: {:?}", delay);
-        thread::sleep(delay);
         
+        thread::sleep(Duration::from_micros(Duration::from_secs_f32(global_vars.absolute_frame_time).as_micros() as u64 - self.elapsed_time as u64));
+
         let now = Instant::now();
         func(cs2)?;
-        let elapsed = now.elapsed().as_micros();
-
-        let elapsed_real = if elapsed > 15625 {
-            elapsed - 15625
-        } else {
-            elapsed
-        };
-
-        self.elapsed_time = elapsed_real;
+        self.elapsed_time =  now.elapsed().as_micros();
         self.last_tick = global_vars.tick_count;
         self.last_frame = global_vars.frame_count;
+        
 
         Ok(())
     }

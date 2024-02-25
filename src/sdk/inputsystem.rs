@@ -45,4 +45,11 @@ impl InputSystem {
         let keys = self.keys.lock().unwrap();        
         Ok(keys.contains(&key))
     }
+
+    pub fn send_input(&self, key: Key) -> Result<()> {
+        rdev::simulate(&EventType::KeyPress(key))?;
+        rdev::simulate(&EventType::KeyRelease(key))?;
+        
+        Ok(())
+    }
 }

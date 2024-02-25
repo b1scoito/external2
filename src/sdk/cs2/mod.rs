@@ -9,6 +9,7 @@ use std::sync::Arc;
 use color_eyre::eyre::{self, Ok, Result};
 use rdev::Key;
 use crate::{memory::Memory, sdk::cs2::structures::GlobalVarsBase};
+
 use super::{cs2, Sdk};
 
 pub struct Cs2 {
@@ -21,6 +22,7 @@ pub struct EntityImpl {
 }
 
 pub trait Entity {
+    fn get_position(&self) -> Result<structures::Vector3::<f32>>;
     fn health(&self) -> Result<u32>;
     fn life_state(&self) -> Result<u32>;
     fn move_type(&self) -> Result<u32>;
@@ -72,6 +74,12 @@ impl Entity for EntityImpl {
     #[inline]
     fn health(&self) -> Result<u32> {
         Ok(self.sdk.get_memory().read::<u32>(self.entity_address + cs2::windows::interfaces::client::C_BaseEntity::m_iHealth)?)
+    }
+
+    #[inline]
+    fn get_position(&self) -> Result<structures::Vector3::<f32>> {
+        Ok(self.sdk.get_memory().read::<structures::Vector3::<f32>>(self.entity_address + cs2::windows::interfaces::client::C_BasePlayerPawn::m_vOldOrigin
+            )?)
     }
 }
 
@@ -136,10 +144,34 @@ impl Client for Cs2 {
 
     #[inline]
     fn set_jump(&self) -> Result<()> {
-        Ok(self.sdk.get_memory().write::<u32>(
-                    self.sdk.get_module("client.dll").unwrap().base_address + cs2::windows::offsets::client_dll::dwForceJump,
-                    65537,
-                )?)
+        // Ok(self.sdk.get_memory().write::<u32>(
+        //             self.sdk.get_module("client.dll").unwrap().base_address + cs2::windows::offsets::client_dll::dwForceJump,
+        //             65537,
+        //         )?)
+
+        // let inputs = [
+        //     INPUT {
+        //         r#type: INPUT_KEYBOARD,
+        //         Anonymous: INPUT_0 {
+        //             ki: KEYBDINPUT {
+        //                 wVk: VK_J,
+        //                 ..Default::default()
+        //             }
+        //         },
+        //     },
+        //     INPUT {
+        //         r#type: INPUT_KEYBOARD,
+        //         Anonymous: INPUT_0 {
+        //             ki: KEYBDINPUT {
+        //                 wVk: VK_J,
+        //                 dwFlags: KEYEVENTF_KEYUP,
+        //                 ..Default::default()
+        //             }
+        //         },
+        //     }
+        // ];   
+
+        Ok(self.sdk.get_input_system().send_input(Key::KeyJ)?)
     }
 
     #[inline]

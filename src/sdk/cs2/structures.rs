@@ -76,6 +76,8 @@ pub enum MoveType
 	MOVETYPE_CUSTOM,
 }
 
+pub(crate) type Vector3<T> = [T; 3];
+
 #[derive(Debug)]
 #[repr(C)]
 pub enum LifeState

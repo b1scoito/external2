@@ -1,5 +1,3 @@
-use std::{thread, time::Duration};
-
 use color_eyre::eyre::{self, Result};
 
 use crate::{cheats::CheatState, sdk::cs2::{structures::{EntityFlag, LifeState, MoveType}, Client, Cs2, Entity, Input, System}};
@@ -23,11 +21,11 @@ pub fn initialize(cs2: Cs2) -> Result<()> {
 
             let local_player = cs2.get_local_player()?;
             let move_type = local_player.move_type()?;
-            // let life_state = local_player.life_state()?;
+            let life_state = local_player.life_state()?;
 
-            // if life_state & LifeState::LIFE_ALIVE as u32 == 1 {
-            //     return Err(eyre::eyre!("local player is dead"));
-            // }
+            if life_state & LifeState::LIFE_ALIVE as u32 == 1 {
+                return Err(eyre::eyre!("local player is dead"));
+            }
 
             if move_type == MoveType::MOVETYPE_LADDER as u32 || 
                 move_type == MoveType::MOVETYPE_NOCLIP as u32 ||
@@ -36,20 +34,20 @@ pub fn initialize(cs2: Cs2) -> Result<()> {
             }
             
             if local_player.flags()? & EntityFlag::FL_ONGROUND == 1 {
-                // 1-tick for sub-tick?
-                // This probably needs to be compensated with the f
-                thread::sleep(Duration::from_micros(15625));
                 cs2.set_jump()?;
-            } else {
-                if cs2.get_jump()? == 65537 {
-                    cs2.unset_jump()?;
-                }
-                // TODO: Find out the best sub-tick value for this
-                // TODO: Fix bhop timing???
-                // Which delay for next tick???
-                thread::sleep(Duration::from_micros(1000));
-
+                // 1-tick for sub-tick?
+                // This probably needs to be compensated with the frame time
+                // thread::sleep(Duration::from_micros(15625));
             }
+            // } else {
+            //     if cs2.get_jump()? == 65537 {
+            //         cs2.unset_jump()?;
+            //     }
+            //     // TODO: Find out the best sub-tick value for this
+            //     // TODO: Fix bhop timing???
+            //     // Which delay for next tick???
+            //     thread::sleep(Duration::from_micros(1000));
+            // }
 
             
             Ok(())

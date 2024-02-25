@@ -20,6 +20,7 @@ pub use crate::memory::windows::Windows as PlatformMemory;
 
 pub mod inputsystem;
 pub mod cs2;
+pub mod overlay;
 
 // TODO: SDK Initialization does not need to be separate for each platform
 #[derive(Debug, Clone, Copy)]

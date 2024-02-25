@@ -3,7 +3,7 @@ use std::{sync::Arc, thread};
 use cheats::bhop;
 use color_eyre::Result;
 
-use sdk::{cs2::Cs2, Games};
+use sdk::{cs2::Cs2, overlay::SdkOverlay, Games};
 use tracing_subscriber::filter::LevelFilter;
 
 mod cheats;
@@ -32,9 +32,14 @@ fn main() -> Result<()> {
             });
 
             // Wait for any key to be pressed
-            let _ = std::io::stdin().read_line(&mut String::new());
+            // let _ = std::io::stdin().read_line(&mut String::new());
         },
     }
+
+    // Initialize overlay
+    // thread::spawn(|| {
+    egui_overlay::start(SdkOverlay { frame: 0, size: [1280.0, 800.0], pos: [0.0, 0.0]});
+    // });
 
     Ok(())
 }
