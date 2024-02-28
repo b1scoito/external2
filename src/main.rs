@@ -1,10 +1,12 @@
-use std::{sync::Arc, thread};
+use std::{sync::Arc, thread, time::Duration};
 
 use cheats::bhop;
 use color_eyre::Result;
 
 use sdk::{cs2::Cs2, overlay::SdkOverlay, Games};
 use tracing_subscriber::filter::LevelFilter;
+
+use crate::cheats::esp;
 
 mod cheats;
 mod memory;
@@ -21,15 +23,34 @@ fn main() -> Result<()> {
     thread::spawn(move || {
         platform_sdk_clone.get_input_system().init_listen_callback()
     });
-
+    
     match platform_sdk.get_game() {
         Games::Cs2 => {
             log::info!("external2 detected game: counter-strike 2");
 
-            let cs2_sdk = Cs2::new(platform_sdk)?;
+            // thread-safe reference to the CS2 SDK
+            let cs2_sdk = Arc::new(Cs2::new(platform_sdk)?);
+
+            // initialize caching thread
+            let cs2_sdk_clone = Arc::clone(&cs2_sdk);
             thread::spawn(move || {
-                bhop::initialize(cs2_sdk).unwrap_or_else(|e| log::error!("bhop error: {}", e))
+                loop {
+                    thread::sleep(Duration::from_secs(1));
+                    cs2_sdk_clone.update_entity_cache().unwrap_or_else(|e| log::error!("cache thread error: {}", e))
+                }
             });
+
+            let cs2_sdk_clone = Arc::clone(&cs2_sdk);
+            thread::spawn(move || {
+                bhop::initialize(cs2_sdk_clone).unwrap_or_else(|e| log::error!("bhop error: {}", e))
+            });
+
+            let cs2_sdk_clone = Arc::clone(&cs2_sdk);
+            thread::spawn(move || {
+                esp::initialize(cs2_sdk_clone).unwrap_or_else(|e| log::error!("esp error: {}", e))
+            });
+
+            // Other cheats
 
             // Wait for any key to be pressed
             // let _ = std::io::stdin().read_line(&mut String::new());
@@ -38,7 +59,7 @@ fn main() -> Result<()> {
 
     // Initialize overlay
     // thread::spawn(|| {
-    egui_overlay::start(SdkOverlay { frame: 0, size: [1280.0, 800.0], pos: [0.0, 0.0]});
+    egui_overlay::start(SdkOverlay::new());
     // });
 
     Ok(())

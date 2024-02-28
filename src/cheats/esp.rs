@@ -1,10 +1,12 @@
+use std::sync::Arc;
+
 use color_eyre::eyre::{self, Result};
 
-use crate::{cheats::CheatState, sdk::cs2::System, Cs2};
+use crate::{cheats::CheatState, sdk::cs2::{Entity, System}, Cs2};
 
 
 // TODO: Make global init function with game sync global state, using GlobalVars
-pub fn initialize(cs2: Cs2) -> Result<()> {
+pub fn initialize(cs2: Arc<Cs2>) -> Result<()> {
     log::info!("initializing bhop cheat");
 
     let mut cheat_state = CheatState::new();
@@ -15,9 +17,16 @@ pub fn initialize(cs2: Cs2) -> Result<()> {
                 return Err(eyre::eyre!("cs2 window not found"));
             }
 
-            // Loop through all cached entities
-            // Get their location
-            // Draw a simple box with overlay
+            for (entity_address, entity) in cs2.get_cached_entity_list()? {
+                let position = entity.get_position()?;
+                let health = entity.health()?;
+                let life_state = entity.life_state()?;
+                let move_type = entity.move_type()?;
+                let flags = entity.flags()?;
+                let name = entity.name()?;
+
+                log::info!("entity_address: {:#X}, position: {:?}, health: {}, life_state: {}, move_type: {}, flags: {}, name {}", entity_address, position, health, life_state, move_type, flags, name);
+            }
             
             Ok(())
         });

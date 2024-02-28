@@ -4,24 +4,32 @@ mod windows;
 pub mod structures;
 
 use active_win_pos_rs::get_active_window;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::{Arc, Mutex}};
 
 use color_eyre::eyre::{self, Ok, Result};
 use rdev::Key;
 use crate::{memory::Memory, sdk::cs2::structures::GlobalVarsBase};
+use lazy_static::lazy_static;
 
 use super::{cs2, Sdk};
+
+lazy_static! { // Requires the `lazy_static` crate for global laziness
+    static ref ENTITY_CACHE: Mutex<HashMap<usize, EntityImpl>> = Mutex::new(HashMap::new());
+}
 
 pub struct Cs2 {
     sdk: Arc<dyn Sdk>,
 }
 
+
+#[derive(Clone)]
 pub struct EntityImpl {
     pub entity_address: usize,
     pub sdk: Arc<dyn Sdk>,
 }
 
 pub trait Entity {
+    fn name(&self) -> Result<String>;
     fn get_position(&self) -> Result<structures::Vector3::<f32>>;
     fn health(&self) -> Result<u32>;
     fn life_state(&self) -> Result<u32>;
@@ -52,6 +60,68 @@ impl Cs2 {
     pub fn new(sdk: Arc<dyn Sdk>) -> Result<Self> {
         Ok(Self { sdk })
     }
+
+    pub fn update_entity_cache(&self) -> Result<()> {
+        let mut cache = ENTITY_CACHE.lock().unwrap();
+        cache.clear(); // Clear the existing cache
+
+        let entity_list_address = self.sdk.get_memory().read::<usize>(
+            self.sdk.get_module("client.dll").unwrap().base_address + cs2::windows::offsets::client_dll::dwEntityList,
+        )?;
+
+        // Get the entity list address
+        for i in 0..self.get_global_vars()?.max_clients {
+            // first entry
+            let list_entry = self.sdk.get_memory().read::<usize>(entity_list_address + (0x8 * ((i as usize & 0x7FFF) >> 9)) + 0x10)?;
+            if list_entry == 0 {
+                continue;
+            } else {
+                log::debug!("list_entry: {:#X}", list_entry);
+            }
+
+            // Get the entity controller address
+            let controller = self.sdk.get_memory().read::<usize>(list_entry + (0x78 * (i as usize & 0x1FF)))?;
+            if controller == 0 {
+                continue; 
+            } else {
+                log::debug!("controller: {:#X}", controller);
+            }
+
+            // Get the entity pawn address
+            let pawn_handle = self.sdk.get_memory().read::<usize>(controller + 0x7E4)?;
+            if pawn_handle == 0 {
+                continue;
+            } else {
+                log::debug!("pawn_handle: {:#X}", pawn_handle);
+            }
+
+            let second_list_entry = self.sdk.get_memory().read::<usize>(entity_list_address + 0x8 * (((pawn_handle & 0x7FFF) >> 9) + 0x10))?;
+            if second_list_entry == 0 { 
+                continue;
+            } else{
+                log::debug!("second_list_entry: {:#X}", second_list_entry);
+            }
+
+            let pawn = self.sdk.get_memory().read::<usize>(second_list_entry + (0x78 * (pawn_handle & 0x1FF)))?;
+            if pawn == 0 {
+                continue;
+            } else{
+                log::debug!("pawn: {:#X}", pawn);
+            }
+
+            cache.insert(i as usize, EntityImpl {
+                entity_address: pawn, // Just an example, actual initialization may vary
+                sdk: self.sdk.clone(),
+            }); // Use entity index or a unique identifier as the key
+        }
+
+        Ok(())
+    }
+
+    pub fn get_cached_entity_list(&self) -> Result<HashMap<usize, EntityImpl>> {
+        let cache = ENTITY_CACHE.lock().unwrap();
+        Ok(cache.clone())
+    }
 }
 
 
@@ -81,31 +151,19 @@ impl Entity for EntityImpl {
         Ok(self.sdk.get_memory().read::<structures::Vector3::<f32>>(self.entity_address + cs2::windows::interfaces::client::C_BasePlayerPawn::m_vOldOrigin
             )?)
     }
+
+    #[inline]
+    fn name(&self) -> Result<String> {
+        Ok(self.sdk.get_memory().read_string(self.entity_address + cs2::windows::interfaces::client::CBasePlayerController::m_iszPlayerName)?)
+    }
 }
 
 impl Client for Cs2 {
     fn get_local_player(&self) -> Result<EntityImpl> {
-        let offset = if cfg!(target_os = "windows") {
-            cs2::windows::offsets::client_dll::dwLocalPlayerPawn
-        } else if cfg!(target_os = "linux") {
-            // cs2::linux::offsets::client_dll::dwLocalPlayerPawn
-            0x0
-        } else {
-            return Err(eyre::eyre!("unsupported platform"));
-        };
-
-        let module = if cfg!(target_os = "windows") {
-            "client.dll"
-        } else if cfg!(target_os = "linux") {
-            "libclient.so"
-        } else {
-            return Err(eyre::eyre!("unsupported platform"));
-        };
-
         let mut local_player_addr: usize = self
             .sdk
             .get_memory()
-            .read::<usize>(self.sdk.get_module(module).unwrap().base_address + offset)?;
+            .read::<usize>(self.sdk.get_module("client.dll").unwrap().base_address + cs2::windows::offsets::client_dll::dwLocalPlayerPawn)?;
 
         // Wait for local_player to be found, will be changed with the addition of map changes and other events
         if local_player_addr == 0 {
@@ -113,7 +171,7 @@ impl Client for Cs2 {
                 local_player_addr = self
                     .sdk
                     .get_memory()
-                    .read::<usize>(self.sdk.get_module(module).unwrap().base_address + offset)?;
+                    .read::<usize>(self.sdk.get_module("client.dll").unwrap().base_address + cs2::windows::offsets::client_dll::dwLocalPlayerPawn)?;
 
                 if local_player_addr != 0 {
                     break;
@@ -148,28 +206,6 @@ impl Client for Cs2 {
         //             self.sdk.get_module("client.dll").unwrap().base_address + cs2::windows::offsets::client_dll::dwForceJump,
         //             65537,
         //         )?)
-
-        // let inputs = [
-        //     INPUT {
-        //         r#type: INPUT_KEYBOARD,
-        //         Anonymous: INPUT_0 {
-        //             ki: KEYBDINPUT {
-        //                 wVk: VK_J,
-        //                 ..Default::default()
-        //             }
-        //         },
-        //     },
-        //     INPUT {
-        //         r#type: INPUT_KEYBOARD,
-        //         Anonymous: INPUT_0 {
-        //             ki: KEYBDINPUT {
-        //                 wVk: VK_J,
-        //                 dwFlags: KEYEVENTF_KEYUP,
-        //                 ..Default::default()
-        //             }
-        //         },
-        //     }
-        // ];   
 
         Ok(self.sdk.get_input_system().send_input(Key::KeyJ)?)
     }

@@ -554,6 +554,7 @@ dependencies = [
  "color-eyre",
  "egui",
  "egui_overlay",
+ "lazy_static",
  "log",
  "nix",
  "proc-maps",

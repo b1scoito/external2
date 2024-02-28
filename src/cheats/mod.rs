@@ -32,7 +32,13 @@ impl CheatState {
             return Err(eyre::eyre!("no need to update"));
         }
         
-        thread::sleep(Duration::from_micros(Duration::from_secs_f32(global_vars.absolute_frame_time).as_micros() as u64 - self.elapsed_time as u64));
+        let frame_time_micros = Duration::from_secs_f32(global_vars.absolute_frame_time).as_micros() as u64;
+        let elapsed_time_micros = self.elapsed_time as u64;
+
+        if elapsed_time_micros < frame_time_micros {
+            let sleep_duration = frame_time_micros - elapsed_time_micros;
+            thread::sleep(Duration::from_micros(sleep_duration));
+        }
 
         let now = Instant::now();
         func(cs2)?;

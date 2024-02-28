@@ -5,16 +5,12 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[features]
-default = ["egui_default"]
-egui_default = ["egui/default"]
-
-
 [dependencies]
 active-win-pos-rs = "0.8.3"
 color-eyre = "0.6.2"
 egui = "0.26.2"
 egui_overlay = "0.8.0"
+lazy_static = "1.4.0"
 log = "0.4.20"
 rdev = { version = "0.5.3", features = ["unstable_grab"] }
 regex = "1.10.2"

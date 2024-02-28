@@ -1,10 +1,12 @@
+use std::sync::Arc;
+
 use color_eyre::eyre::{self, Result};
 
 use crate::{cheats::CheatState, sdk::cs2::{structures::{EntityFlag, LifeState, MoveType}, Client, Cs2, Entity, Input, System}};
 
 
 // TODO: Make global init function with game sync global state, using GlobalVars
-pub fn initialize(cs2: Cs2) -> Result<()> {
+pub fn initialize(cs2: Arc<Cs2>) -> Result<()> {
     log::info!("initializing bhop cheat");
 
     let mut cheat_state = CheatState::new();
